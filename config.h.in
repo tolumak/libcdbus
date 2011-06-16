@@ -1,0 +1,14 @@
+/*
+ * D-Bus C Bindings library
+ * 
+ * Copyright 2011 S.I.S.E. S.A
+ * Author: Michel Lafon-Puyo <mlafon-puyo@sise.fr>
+ *
+ */
+
+#ifndef __LIBCDBUS_CONFIG_H
+#define __LIBCDBUS_CONFIG_H
+
+#define LOG_LEVEL @LOG_LEVEL@
+
+#endif
