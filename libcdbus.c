@@ -14,6 +14,8 @@
 #include "libcdbus.h"
 #include "log.h"
 
+#define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
+
 struct watch_t {
 	struct list_item_t litem;
 	DBusWatch *dbwatch;
@@ -495,6 +497,109 @@ int cdbus_timeout_handle()
 post_update:
 	previous.tv_sec = now.tv_sec;
 	previous.tv_nsec = now.tv_nsec;
+
+	return 0;
+}
+
+cdbus_proxy_fcn_t find_method(const char * member,
+			struct cdbus_interface_entry_t * itf_table)
+{
+	struct cdbus_interface_entry_t * msg_entry = itf_table;
+ 	while (msg_entry->msg_name) {
+		if (!strcmp(msg_entry->msg_name, member))
+			break;
+		msg_entry++;
+	}
+
+	if (!msg_entry->msg_name)
+		return NULL;
+	return msg_entry->msg_fcn;
+}
+
+cdbus_proxy_fcn_t find_method_with_interface(const char * interface,
+					const char * member,
+					struct cdbus_object_entry_t * table)
+{
+	struct cdbus_object_entry_t * itf_entry = table;
+
+
+ 	while (itf_entry->itf_name) {
+		if (!strcmp(itf_entry->itf_name, interface))
+			break;
+		itf_entry++;
+	}
+
+	if (!itf_entry->itf_name)
+		return NULL;
+	return find_method(member, itf_entry->itf_table);
+}
+
+cdbus_proxy_fcn_t find_method_all_interfaces(const char * member,
+					struct cdbus_object_entry_t * table)
+{
+	struct cdbus_object_entry_t * itf_entry = table;
+	cdbus_proxy_fcn_t fcn = NULL;
+
+
+ 	while (itf_entry->itf_name) {
+		fcn = find_method(member, itf_entry->itf_table);
+		if (fcn)
+			return fcn;
+		itf_entry++;
+	}
+
+	return NULL;
+}
+
+DBusHandlerResult object_dispatch(DBusConnection *cnx,
+			DBusMessage *msg,
+			void *data)
+{
+	struct cdbus_object_entry_t * table = data;
+	const char * interface;
+	const char * member;
+	cdbus_proxy_fcn_t fcn;
+	int ret;
+
+	if (!data)
+		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+
+	member = dbus_message_get_member(msg);
+	if (!member)
+		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+
+	interface = dbus_message_get_interface(msg);
+	if (interface) {
+		fcn = find_method_with_interface(interface, member, table);
+	} else {
+		find_method_all_interfaces(member, table);
+	}
+
+	if (!fcn) {
+		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+	}
+
+	ret = fcn(cnx, msg);
+	if (ret < 0)
+		LOG(LOG_WARNING, "Failed to execute handler for member %s"
+			"of object %s", member, dbus_message_get_path(msg));
+
+	return DBUS_HANDLER_RESULT_HANDLED;
+}
+
+
+static DBusObjectPathVTable vtable = {
+	.message_function = object_dispatch,
+};
+
+int cdbus_object_register(DBusConnection * cnx, const char * path,
+			struct cdbus_object_entry_t * object_table)
+{
+	int ret;
+	ret = dbus_connection_register_object_path(cnx, path, &vtable,
+						object_table);
+	if (ret == FALSE)
+		return -1;
 
 	return 0;
 }

@@ -21,4 +21,26 @@ int cdbus_process_pollfds(struct pollfd * fds, int nfds);
 int cdbus_next_timeout_event();
 int cdbus_timeout_handle();
 
+/* Objects management */
+struct cdbus_object_entry_t;
+int cdbus_object_register(DBusConnection * cnx, const char * path,
+			struct cdbus_object_entry_t * table);
+
+
+/* Private declarations */
+
+typedef int (*cdbus_proxy_fcn_t)(DBusConnection *, DBusMessage*);
+
+struct cdbus_interface_entry_t
+{
+	char *msg_name;
+	cdbus_proxy_fcn_t msg_fcn;
+};
+
+struct cdbus_object_entry_t
+{
+	char *itf_name;
+	struct cdbus_interface_entry_t *itf_table;
+};
+
 #endif
