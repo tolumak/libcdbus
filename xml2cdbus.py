@@ -170,9 +170,11 @@ class DBusSignature:
 
     def CDeclareVar(self, direction, varname):
         if self.IsArray():
-            return self.CType(varname) + " " + varname + "; int" + " " + varname + "_len"
+            return self.CType(varname) + " " + varname + " = NULL; int" + " " + varname + "_len = 0"
+        elif self.IsStruct():
+            return self.CType(varname) + " " + varname + " = { 0 }"
         else:
-            return self.CType(varname) + " " + varname
+            return self.CType(varname) + " " + varname + " = 0"
 
     def CFree(self, varname, member="", in_array=False):
         strings = []
@@ -261,13 +263,15 @@ class DBusSignature:
                 param += "->member_" + str(member)
             else:
                 param = "((*" + varname + ")" + "[" + str(member) + "])"
+        strings.append("if (dbus_message_iter_get_arg_type(&" + iterator + ") == " + self.DBusType() + ") {");
         if self.IsPrimitive():
-            strings.append("dbus_message_iter_get_basic(&" + iterator + ", &" + param + ")")
+            strings.append("\tdbus_message_iter_get_basic(&" + iterator + ", &" + param + ");")
         if self.IsArray():
-            strings.append("cdbus_unpack_" + varname + "_array(&" + iterator + ", &" + param + ", &" + param + "_len)")
+            strings.append("\tcdbus_unpack_" + varname + "_array(&" + iterator + ", &" + param + ", &" + param + "_len);")
         if self.IsStruct():
-            strings.append("cdbus_unpack_" + varname + "_struct(&" + iterator + ", &" + param + ")")
-        strings.append("dbus_message_iter_next(&" + iterator + ")")
+            strings.append("\tcdbus_unpack_" + varname + "_struct(&" + iterator + ", &" + param + ");")
+        strings.append("}");
+        strings.append("dbus_message_iter_next(&" + iterator + ");")
         return strings
 
     def CUnpackFunctions(self, varname):
@@ -313,7 +317,7 @@ class DBusSignature:
         string += "\tdbus_message_iter_recurse(iter, &sub_iter);\n"
         string += "\twhile(dbus_message_iter_has_next(&sub_iter)) {\n"
         for x in self.subs:
-            string += "\t\t" + ";\n\t\t".join(y for y in x.CUnpack(varname, "(*" + varname + "_len)++", "sub_iter", True)) + ";\n"
+            string += "\t\t" + "\n\t\t".join(y for y in x.CUnpack(varname, "(*" + varname + "_len)++", "sub_iter", True)) + "\n"
         string += "\t\tdbus_message_iter_next(&sub_iter);\n"
         string += "\t}\n"
         string += "\treturn 0;\n"
@@ -398,6 +402,26 @@ class DBusMessage:
         string += "(" + ', '.join(attributes) + ");\n"
         return string
 
+    def CallCFunction(self):
+        string = self.interface.CName() + '_' 
+        string += self.name
+        string += "(" + ', '.join(x.CVar() for x in self.attributes) + ")"
+        return string
+
+    def CFreeFunctionPrototype(self):
+        string = "void " 
+        string += self.interface.CName() + '_' 
+        string += self.name + "_free"
+        attributes = [x.CVarProto() for x in self.attributes]
+        string += "(" + ', '.join(attributes) + ");\n"
+        return string
+
+    def CallCFreeFunction(self):
+        string = self.interface.CName() + '_' 
+        string += self.name + "_free"
+        string += "(" + ', '.join(x.CVar() for x in self.attributes) + ")"
+        return string
+
     def CProxyName(self):
         string = self.interface.CName() + '_' 
         string += self.name + "_proxy"
@@ -424,13 +448,11 @@ class DBusMessage:
         string += "\tdbus_message_iter_init(msg, &iter);\n"
         for x in self.attributes:
             if x.direction == "in":
-                string += "\t" + ";\n\t".join(y for y in x.CUnpack()) + ";\n"
+                string += "\t" + "\n\t".join(y for y in x.CUnpack()) + "\n"
         string += "\n"
 
         # Call the real functions
-        string += "\tret = " + self.interface.CName() + '_' 
-        string += self.name
-        string += "(" + ', '.join(x.CVar() for x in self.attributes) + ");\n"
+        string += "\tret = " + self.CallCFunction() + ";\n"
         string += "\n"
 
         string += "\tif (ret < 0) {\n"
@@ -458,8 +480,8 @@ class DBusMessage:
                 if x.direction == "out":
                     string += "\t\t" + ";\n\t".join(y for y in x.CPack()) + ";\n"
 
+            string += "\t\t" + self.CallCFreeFunction() + ";\n"
         string += "\t}\n"
-
 
         string += "\tdbus_connection_send(cnx, reply, NULL);\n"
         string += "\tdbus_message_unref(reply);\n"
@@ -488,6 +510,9 @@ class DBusInterface:
     def CName(self):
         return self.name.replace('.', '_')
 
+    def CTableHeader(self):
+        return "extern struct cdbus_interface_entry_t " + self.CTableName() + "[];\n"
+
     def CTable(self):
         string = "struct cdbus_interface_entry_t " + self.CTableName() + "[] = {\n"
         string += "\t" + ",\n\t".join("{\"" + key + "\", " + self.messages[key].CProxyName() + "}" for key in self.messages) + ",\n"
@@ -511,6 +536,9 @@ class DBusObject:
 
     def CName(self):
         return self.name.replace('/', '_')[1:]
+
+    def CTableHeader(self):
+        return "extern struct cdbus_object_entry_t " + self.CName() + "_object_table[];\n"
 
     def CTable(self):
         string = "struct cdbus_object_entry_t " + self.CName() + "_object_table[] = {\n"
@@ -545,6 +573,7 @@ class DBusObject:
         for key in self.interfaces:
             for msg in self.interfaces[key].messages:
                 string += self.interfaces[key].messages[msg].CPrototype()
+                string += self.interfaces[key].messages[msg].CFreeFunctionPrototype()
         string += "\n"
         string += "/* Private declarations, you should don't have to touch it */\n"
         string += "\n"
@@ -552,9 +581,8 @@ class DBusObject:
             for msg in self.interfaces[key].messages:
                 string += self.interfaces[key].messages[msg].CProxyPrototype()
             string += "\n"
-            string += self.interfaces[key].CTable()
-        string += "\n"
-        string += self.CTable()
+            string += self.interfaces[key].CTableHeader()
+        string += self.CTableHeader()
         string += "#endif"
         return string
 
@@ -563,6 +591,11 @@ class DBusObject:
         string += "\n"
         string += "#include <stdlib.h>\n"
         string += "#include \"" + self.CHeaderFileName() + "\"\n"
+        string += "\n"
+        for key in self.interfaces:
+            string += self.interfaces[key].CTable()
+        string += "\n"
+        string += self.CTable()
         string += "\n"
         for key in self.interfaces:
             for msg in self.interfaces[key].messages:
