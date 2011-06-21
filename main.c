@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <errno.h>
 #include "libcdbus.h"
 #include "fr_sise_test.h"
 
@@ -49,7 +50,9 @@ int main(int argc, char **argv)
 	struct pollfd * fds;
 	int nfds;
 	int fifofd;
-	char c;
+	char *msg;
+	int tmp;
+	int nbread;
 
 	memset(&action, 0, sizeof(action));
 	action.sa_handler = sighandler;
@@ -80,8 +83,28 @@ int main(int argc, char **argv)
 		poll(fds, nfds + 1, timeout);
 		cdbus_process_pollfds(fds, nfds);
 		if (fds[nfds].revents) {
-			while (read(fifofd, &c, 1) > 0)
-				printf("%c", c);
+			msg = malloc(128 * sizeof(char));
+			memset(msg, 0, 128 * sizeof(char));
+			tmp = nbread = 0;
+			do {
+				tmp = read(fifofd, msg + nbread,
+					sizeof(msg) - nbread);
+				if (tmp < 0) {
+					if (errno == EINTR)
+						continue;
+					else
+						break;
+				}
+				nbread += tmp;
+			}while(tmp > 0);
+
+			if (tmp == 0) {
+				if (fr_sise_test_Hi(cnx, msg) < 0) {
+					printf("Failed to send signal!\n");
+				}
+			}
+
+			free(msg);
 		}
 		cdbus_timeout_handle();
 	}

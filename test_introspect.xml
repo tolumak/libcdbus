@@ -22,5 +22,8 @@
       <arg type="s" name="who" direction="in"/>
       <arg type="s" name="out" direction="out"/>
     </method>
+    <signal name="Hi">
+      <arg type="s" name="out"/>
+    </signal>
   </interface>
 </node>
