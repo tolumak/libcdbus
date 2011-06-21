@@ -48,7 +48,6 @@ int main(int argc, char **argv)
 	int timeout;
 	struct pollfd * fds;
 	int nfds;
-	int ret;
 	int fifofd;
 	char c;
 
@@ -78,13 +77,11 @@ int main(int argc, char **argv)
 			break;
 		fds[nfds].fd = fifofd;
 		fds[nfds].events = POLLIN;
-		ret = poll(fds, nfds + 1, timeout);
-		if (ret > 0) {
-			cdbus_process_pollfds(fds, nfds);
-			if (fds[nfds].revents) {
-				while (read(fifofd, &c, 1) > 0)
-					printf("%c", c);
-			}
+		poll(fds, nfds + 1, timeout);
+		cdbus_process_pollfds(fds, nfds);
+		if (fds[nfds].revents) {
+			while (read(fifofd, &c, 1) > 0)
+				printf("%c", c);
 		}
 		cdbus_timeout_handle();
 	}
