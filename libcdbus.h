@@ -22,25 +22,36 @@ int cdbus_next_timeout_event();
 int cdbus_timeout_handle();
 
 /* Objects management */
-struct cdbus_object_entry_t;
+struct cdbus_interface_entry_t;
 int cdbus_register_object(DBusConnection * cnx, const char * path,
-			struct cdbus_object_entry_t * table);
+			struct cdbus_interface_entry_t * table);
 
 
 /* Private declarations */
 
 typedef int (*cdbus_proxy_fcn_t)(DBusConnection *, DBusMessage*);
 
-struct cdbus_interface_entry_t
+#define CDBUS_DIRECTION_IN  0
+#define CDBUS_DIRECTION_OUT 1
+
+struct cdbus_arg_entry_t
+{
+	char * arg_name;
+	int direction;
+	char * signature;
+};
+
+struct cdbus_message_entry_t
 {
 	char *msg_name;
 	cdbus_proxy_fcn_t msg_fcn;
+	struct cdbus_arg_entry_t *msg_table;
 };
 
-struct cdbus_object_entry_t
+struct cdbus_interface_entry_t
 {
 	char *itf_name;
-	struct cdbus_interface_entry_t *itf_table;
+	struct cdbus_message_entry_t *itf_table;
 };
 
 #endif

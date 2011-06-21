@@ -1,8 +1,8 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 #
 # D-Bus C Bindings library - XML2cdbus proxy generator
 #
-# Python 3.x required
+# Python 2.7+ required
 #
 # Copyright 2011 S.I.S.E. S.A.
 # Author: Michel Lafon-Puyo <mlafon-puyo@sise.fr>
@@ -97,6 +97,9 @@ class DBusSignature:
         elif self.signature == "v": return "DBUS_TYPE_VARIANT"
         if self.IsArray(): return "DBUS_TYPE_ARRAY"
         if self.IsStruct(): return "DBUS_TYPE_STRUCT"
+
+    def DBusSignature(self):
+        return self.signature + self.SubSignature()
 
     def SubSignature(self):
         signature = ""
@@ -395,35 +398,30 @@ class DBusMethod:
 
     def CPrototype(self):
         string = "int " 
-        string += self.interface.CName() + '_' 
-        string += self.name
+        string += self.CName()
         attributes = [x.CVarProto() for x in self.attributes]
         string += "(" + ', '.join(attributes) + ");\n"
         return string
 
     def CallCFunction(self):
-        string = self.interface.CName() + '_' 
-        string += self.name
+        string = self.CName()
         string += "(" + ', '.join(x.CVar() for x in self.attributes) + ")"
         return string
 
     def CFreeFunctionPrototype(self):
         string = "void " 
-        string += self.interface.CName() + '_' 
-        string += self.name + "_free"
+        string += self.CName() + "_free"
         attributes = [x.CVarProto() for x in self.attributes]
         string += "(" + ', '.join(attributes) + ");\n"
         return string
 
     def CallCFreeFunction(self):
-        string = self.interface.CName() + '_' 
-        string += self.name + "_free"
+        string = self.CName() + "_free"
         string += "(" + ', '.join(x.CVar() for x in self.attributes) + ")"
         return string
 
     def CProxyName(self):
-        string = self.interface.CName() + '_' 
-        string += self.name + "_proxy"
+        string = self.CName() + "_proxy"
         return string
 
     def CProxyPrototype(self):
@@ -434,8 +432,7 @@ class DBusMethod:
     
     def CProxy(self):
         string = "int "
-        string += self.interface.CName() + '_' 
-        string += self.name + "_proxy"
+        string += self.CName() + "_proxy"
         string += "(DBusConnection *cnx, DBusMessage *msg)\n"
         string += "{\n"
         string += "\tint ret;\n"
@@ -496,6 +493,25 @@ class DBusMethod:
         string += "}\n"
         return string
 
+    def CName(self):
+        string = self.interface.CName() + '_' 
+        string += self.name
+        return string
+
+    def CTableHeader(self):
+        return "extern struct cdbus_arg_entry_t " + self.CTableName() + "[];\n"
+
+    def CTable(self):
+        string = "struct cdbus_arg_entry_t " + self.CTableName() + "[] = {\n"
+        for attr in self.attributes:
+            string += "\t{\"" + attr.name + "\", CDBUS_DIRECTION_" + attr.direction.upper() + ", \"" + attr.type.DBusSignature() + "\"},\n"
+        string += "\t{NULL, 0, NULL},\n"
+        string += "};\n"
+        return string
+
+    def CTableName(self):
+        return self.CName() + "_method_table"
+
 
 class DBusSignal:
     def __init__(self, name, interface, obj, attributes):
@@ -504,18 +520,21 @@ class DBusSignal:
         self.interface = interface
         self.object = obj
 
+    def CName(self):
+        string = self.interface.CName() + '_' 
+        string += self.name
+        return string
+    
     def CPrototype(self):
         string = "int " 
-        string += self.interface.CName() + '_' 
-        string += self.name
+        string += self.CName()
         attributes = [x.CVarProto() for x in self.attributes]
         string += "(DBusConnection *cnx, " + ', '.join(attributes) + ");\n"
         return string
 
     def CFunction(self):
         string = "int "
-        string += self.interface.CName() + '_' 
-        string += self.name
+        string += self.CName()
         string += "(DBusConnection *cnx, "
         attributes = [x.CVarProto() for x in self.attributes]
         string += ', '.join(attributes)
@@ -546,6 +565,19 @@ class DBusSignal:
         string += "}\n"
         return string
 
+    def CTableHeader(self):
+        return "extern struct cdbus_arg_entry_t " + self.CTableName() + "[];\n"
+
+    def CTable(self):
+        string = "struct cdbus_arg_entry_t " + self.CTableName() + "[] = {\n"
+        for attr in self.attributes:
+            string += "\t{\"" + attr.name + "\", CDBUS_DIRECTION_" + attr.direction.upper() + ", \"" + attr.type.DBusSignature() + "\"},\n"
+        string += "\t{NULL, 0, NULL},\n"
+        string += "};\n"
+        return string
+
+    def CTableName(self):
+        return self.CName() + "_signal_table"
 
 class DBusInterface:
     def __init__(self,name):
@@ -563,11 +595,14 @@ class DBusInterface:
         return self.name.replace('.', '_')
 
     def CTableHeader(self):
-        return "extern struct cdbus_interface_entry_t " + self.CTableName() + "[];\n"
+        return "extern struct cdbus_message_entry_t " + self.CTableName() + "[];\n"
 
     def CTable(self):
-        string = "struct cdbus_interface_entry_t " + self.CTableName() + "[] = {\n"
-        string += "\t" + ",\n\t".join("{\"" + key + "\", " + self.methods[key].CProxyName() + "}" for key in self.methods) + ",\n"
+        string = "struct cdbus_message_entry_t " + self.CTableName() + "[] = {\n"
+        for (name, method) in self.methods.items():
+            string += "\t{\"" + name + "\", " + method.CProxyName() + ", " + method.CTableName() + "},\n"
+        for (name, signal) in self.signals.items():
+            string += "\t{\"" + name + "\", NULL, " + signal.CTableName() +"},\n"
         string += "\t{NULL, NULL},\n"
         string += "};\n"
         return string
@@ -590,10 +625,10 @@ class DBusObject:
         return self.name.replace('/', '_')[1:]
 
     def CTableHeader(self):
-        return "extern struct cdbus_object_entry_t " + self.CName() + "_object_table[];\n"
+        return "extern struct cdbus_interface_entry_t " + self.CName() + "_object_table[];\n"
 
     def CTable(self):
-        string = "struct cdbus_object_entry_t " + self.CName() + "_object_table[] = {\n"
+        string = "struct cdbus_interface_entry_t " + self.CName() + "_object_table[] = {\n"
         string += "\t" + ",\n\t".join("{\"" + key + "\", " + self.interfaces[key].CTableName() + "}"  for key in self.interfaces) + ",\n"
         string += "\t{NULL, NULL},\n"
         string += "};\n"
@@ -614,32 +649,38 @@ class DBusObject:
         string += "\n"
         string += "/* Generated types */\n"
         string += "\n"
-        for key in self.interfaces:
-            for msg in self.interfaces[key].methods:
-                for attr in self.interfaces[key].methods[msg].attributes:
+        for itf in self.interfaces.values():
+            for msg in itf.methods.values():
+                for attr in msg.attributes:
                     for typestring in attr.type.CTypeDef(attr.name):
                         string += typestring
         string += "\n"
         string += "/* Functions implemented by the library user */\n"
         string += "\n"
-        for key in self.interfaces:
-            for msg in self.interfaces[key].methods:
-                string += self.interfaces[key].methods[msg].CPrototype()
-                string += self.interfaces[key].methods[msg].CFreeFunctionPrototype()
+        for itf in self.interfaces.values():
+            for msg in itf.methods.values():
+                string += msg.CPrototype()
+                string += msg.CFreeFunctionPrototype()
         string += "\n"
         string += "/* Public functions */\n"
         string += "\n"
-        for key in self.interfaces:
-            for msg in self.interfaces[key].signals:
-                string += self.interfaces[key].signals[msg].CPrototype()
+        for itf in self.interfaces.values():
+            for msg in itf.signals.values():
+                string += msg.CPrototype()
         string += "\n"
         string += "/* Private declarations, you should don't have to touch it */\n"
         string += "\n"
-        for key in self.interfaces:
-            for msg in self.interfaces[key].methods:
-                string += self.interfaces[key].methods[msg].CProxyPrototype()
+        for itf in self.interfaces.values():
+            for msg in itf.methods.values():
+                string += msg.CProxyPrototype()
             string += "\n"
-            string += self.interfaces[key].CTableHeader()
+        for itf in self.interfaces.values():
+            for msg in itf.methods.values():
+                string += msg.CTableHeader();
+            for msg in itf.signals.values():
+                string += msg.CTableHeader();
+            string += "\n"
+            string += itf.CTableHeader()
         string += self.CTableHeader()
         string += "#endif"
         return string
@@ -650,30 +691,34 @@ class DBusObject:
         string += "#include <stdlib.h>\n"
         string += "#include \"" + self.CHeaderFileName() + "\"\n"
         string += "\n"
-        for key in self.interfaces:
-            string += self.interfaces[key].CTable()
+        for itf in self.interfaces.values():
+            for msg in itf.methods.values():
+                string += msg.CTable();
+            for msg in itf.signals.values():
+                string += msg.CTable();
+            string += itf.CTable()
         string += "\n"
         string += self.CTable()
         string += "\n"
-        for key in self.interfaces:
-            for msg in self.interfaces[key].methods:
-                for attr in self.interfaces[key].methods[msg].attributes:
+        for itf in self.interfaces.values():
+            for msg in itf.methods.values():
+                for attr in msg.attributes:
                     if attr.direction == "in":
                         for funcstring in attr.type.CUnpackFunctions(attr.name):
                             string += funcstring + "\n"
                     if attr.direction == "out":
                         for funcstring in attr.type.CPackFunctions(attr.name):
                             string += funcstring + "\n"
-            for msg in self.interfaces[key].signals:
-                for attr in self.interfaces[key].signals[msg].attributes:
+            for msg in itf.signals.values():
+                for attr in msg.attributes:
                     for funcstring in attr.type.CPackFunctions(attr.name):
                         string += funcstring + "\n"
 
-        for key in self.interfaces:
-            for msg in self.interfaces[key].methods:
-                string += self.interfaces[key].methods[msg].CProxy() + "\n"
-            for msg in self.interfaces[key].signals:
-                string += self.interfaces[key].signals[msg].CFunction() + "\n"
+        for itf in self.interfaces.values():
+            for msg in itf.methods.values():
+                string += msg.CProxy() + "\n"
+            for msg in itf.signals.values():
+                string += msg.CFunction() + "\n"
 
         return string
 
@@ -748,7 +793,6 @@ def end_element_handler(name):
         f = open(objects[current_node].CFileName(), "w")
         f.write(objects[current_node].CFile())
         f.close()
-    
 
 def usage():
     print("Usage:\t" + sys.argv[0] + " <introspection_file.xml>")
@@ -771,7 +815,7 @@ def main():
         usage()
         exit(1)
     
-    introspectionFile = open(args[0])
+    introspectionFile = open(args[0], "rb")
     
     parser = xml.parsers.expat.ParserCreate()
     parser.StartElementHandler = start_element_handler

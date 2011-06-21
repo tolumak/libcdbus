@@ -7,6 +7,7 @@
  */
 
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
@@ -15,6 +16,15 @@
 #include "log.h"
 
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
+#define EXTSTR_BUFF_SIZE 16
+#define EXTSTR_BUFFER(s) ((s)->buffer + (s)->size)
+#define EXTSTR_REM_SIZE(s) ((s)->buf_size - (s)->size)
+
+struct extensible_string_t {
+	int size;
+	char * buffer;
+	int buf_size;
+};
 
 struct watch_t {
 	struct list_item_t litem;
@@ -502,9 +512,9 @@ post_update:
 }
 
 cdbus_proxy_fcn_t find_method(const char * member,
-			struct cdbus_interface_entry_t * itf_table)
+			struct cdbus_message_entry_t * itf_table)
 {
-	struct cdbus_interface_entry_t * msg_entry = itf_table;
+	struct cdbus_message_entry_t * msg_entry = itf_table;
  	while (msg_entry->msg_name) {
 		if (!strcmp(msg_entry->msg_name, member))
 			break;
@@ -518,9 +528,9 @@ cdbus_proxy_fcn_t find_method(const char * member,
 
 cdbus_proxy_fcn_t find_method_with_interface(const char * interface,
 					const char * member,
-					struct cdbus_object_entry_t * table)
+					struct cdbus_interface_entry_t * table)
 {
-	struct cdbus_object_entry_t * itf_entry = table;
+	struct cdbus_interface_entry_t * itf_entry = table;
 
 
  	while (itf_entry->itf_name) {
@@ -535,9 +545,9 @@ cdbus_proxy_fcn_t find_method_with_interface(const char * interface,
 }
 
 cdbus_proxy_fcn_t find_method_all_interfaces(const char * member,
-					struct cdbus_object_entry_t * table)
+					struct cdbus_interface_entry_t * table)
 {
-	struct cdbus_object_entry_t * itf_entry = table;
+	struct cdbus_interface_entry_t * itf_entry = table;
 	cdbus_proxy_fcn_t fcn = NULL;
 
 
@@ -551,11 +561,220 @@ cdbus_proxy_fcn_t find_method_all_interfaces(const char * member,
 	return NULL;
 }
 
+int extstr_init(struct extensible_string_t * str)
+{
+	str->size = 0;
+	str->buf_size = 0;
+	str->buffer = malloc(EXTSTR_BUFF_SIZE);
+	if (!str->buffer)
+		return -1;
+	str->buf_size = EXTSTR_BUFF_SIZE;
+	return 0;
+}
+
+void extstr_free(struct extensible_string_t * str)
+{
+	if (str->buffer) {
+		free(str->buffer);
+		str->buffer = NULL;
+	}
+	str->size = 0;
+	str->buf_size = 0;
+}
+
+int extstr_extend(struct extensible_string_t * str)
+{
+	char * buf;
+	buf = realloc(str->buffer, str->buf_size + EXTSTR_BUFF_SIZE);
+
+	if (!buf)
+		return -1;
+
+	str->buffer = buf;
+	str->buf_size += EXTSTR_BUFF_SIZE;
+	return 0;
+}
+
+int extstr_append_sprintf(struct extensible_string_t * str,
+			const char * format, ...)
+{
+	va_list ap;
+	int n;
+	int extended = 0;
+
+	do {
+		extended = 0;
+
+		va_start(ap, format);
+		n = vsnprintf(EXTSTR_BUFFER(str),
+			EXTSTR_REM_SIZE(str),
+			format,
+			ap);
+		va_end(ap);
+
+		if (n >= EXTSTR_REM_SIZE(str)) {
+			extended = 1;
+			if (extstr_extend(str) < 0)
+				return -1;
+		} else {
+			str->size += n;
+		}
+
+	} while (extended);
+
+	return 0;
+}
+
+int generate_argument_xml(struct extensible_string_t * str,
+			struct cdbus_arg_entry_t * arg)
+{
+	int ret;
+	ret = extstr_append_sprintf(str,
+				"<arg name=\"%s\" "
+				"type=\"%s\" "
+				"direction=\"%s\" />",
+				arg->arg_name,
+				arg->signature,
+				(arg->direction == CDBUS_DIRECTION_IN) ? "in" : "out");
+	return ret;
+}
+
+
+int generate_message_xml(struct extensible_string_t * str,
+			struct cdbus_message_entry_t * msg)
+{
+	int ret;
+	struct cdbus_arg_entry_t *arg = msg->msg_table;
+
+	if (msg->msg_fcn) {
+		ret = extstr_append_sprintf(str,
+					"<method name=\"%s\">",
+					msg->msg_name);
+	} else {
+		ret = extstr_append_sprintf(str,
+					"<signal name=\"%s\">",
+					msg->msg_name);
+	}
+	if (ret < 0)
+		return -1;
+
+	while(arg->arg_name) {
+		generate_argument_xml(str, arg);
+		arg++;
+	}
+
+	if (msg->msg_fcn) {
+		ret = extstr_append_sprintf(str,
+					"</method>");
+	} else {
+		ret = extstr_append_sprintf(str,
+					"</signal>");
+	}
+	if (ret < 0)
+		return -1;
+
+	return 0;
+}
+
+int generate_interface_xml(struct extensible_string_t * str,
+			struct cdbus_interface_entry_t * itf)
+{
+	int ret;
+	struct cdbus_message_entry_t *msg = itf->itf_table;
+
+	ret = extstr_append_sprintf(str,
+				"<interface name=\"%s\">",
+				itf->itf_name);
+	if (ret < 0)
+		return -1;
+
+	while (msg->msg_name) {
+		ret = generate_message_xml(str, msg);
+		if (ret < 0)
+			return -1;
+		msg++;
+	}
+
+	ret = extstr_append_sprintf(str,
+				"</interface>");
+	if (ret < 0)
+		return -1;
+
+}
+
+
+int generate_object_xml(struct extensible_string_t * str,
+			struct cdbus_interface_entry_t * table)
+{
+	int ret;
+	struct cdbus_interface_entry_t *itf = table;
+	ret = extstr_append_sprintf(str, "%s\n",
+				DBUS_INTROSPECT_1_0_XML_DOCTYPE_DECL_NODE);
+	if (ret < 0)
+		return -1;
+
+	ret = extstr_append_sprintf(str, "<node>");
+	if (ret < 0)
+		return -1;
+
+	while(itf->itf_name) {
+		ret = generate_interface_xml(str, itf);
+		if (ret < 0)
+			return -1;
+		itf++;
+	}
+
+	ret = extstr_append_sprintf(str, "</node>");
+	if (ret < 0)
+		return -1;
+
+	return 0;
+}
+
+
+int object_introspect(DBusConnection *cnx,
+		DBusMessage *msg,
+		struct cdbus_interface_entry_t * table)
+{
+	struct extensible_string_t str;
+	int ret = 0;
+	DBusMessage *reply;
+
+	if (extstr_init(&str) < 0)
+		return -1;
+
+	ret = generate_object_xml(&str, table);
+	if (ret < 0)
+		goto free;
+
+	reply = dbus_message_new_method_return(msg);
+	if (!reply) {
+		ret = -1;
+		goto free;
+	}
+
+	if (dbus_message_append_args(reply,
+					DBUS_TYPE_STRING,
+					&str.buffer,
+					DBUS_TYPE_INVALID) == FALSE) {
+		ret = -1;
+		goto msg_unref;
+	}
+
+	dbus_connection_send(cnx, reply, NULL);
+
+msg_unref:
+	dbus_message_unref(reply);
+free:
+	extstr_free(&str);
+	return ret;
+}
+
 DBusHandlerResult object_dispatch(DBusConnection *cnx,
 			DBusMessage *msg,
 			void *data)
 {
-	struct cdbus_object_entry_t * table = data;
+	struct cdbus_interface_entry_t * table = data;
 	const char * interface;
 	const char * member;
 	cdbus_proxy_fcn_t fcn;
@@ -567,6 +786,13 @@ DBusHandlerResult object_dispatch(DBusConnection *cnx,
 	member = dbus_message_get_member(msg);
 	if (!member)
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+
+	if (!strncmp(member, "Introspect", strlen(member))) {
+		if (object_introspect(cnx, msg, table) < 0)
+			return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+		else
+			return DBUS_HANDLER_RESULT_HANDLED;
+	}
 
 	interface = dbus_message_get_interface(msg);
 	if (interface) {
@@ -593,7 +819,7 @@ static DBusObjectPathVTable vtable = {
 };
 
 int cdbus_register_object(DBusConnection * cnx, const char * path,
-			struct cdbus_object_entry_t * object_table)
+			struct cdbus_interface_entry_t * object_table)
 {
 	int ret;
 	ret = dbus_connection_register_object_path(cnx, path, &vtable,
