@@ -387,12 +387,11 @@ class DBusAttribute:
     def CFree(self):
         return self.type.CFree(self.name)
 
-class DBusMessage:
-    def __init__(self, name, interface, attributes, is_signal):
+class DBusMethod:
+    def __init__(self, name, interface, attributes):
         self.name = name
         self.attributes = attributes
         self.interface = interface
-        self.is_signal = is_signal
 
     def CPrototype(self):
         string = "int " 
@@ -433,7 +432,7 @@ class DBusMessage:
         string += "(DBusConnection *cnx, DBusMessage *msg);\n"
         return string
     
-    def CProxyCode(self):
+    def CProxy(self):
         string = "int "
         string += self.interface.CName() + '_' 
         string += self.name + "_proxy"
@@ -468,19 +467,18 @@ class DBusMessage:
 
         string += "\t} else {\n"
 
-        # else, unpack the variables and send the reply message
-        if not self.is_signal:
-            string += "\t\treply = dbus_message_new_method_return(msg);\n"
-            string += "\t\tif (!reply) {\n"
-            string += "\t\t\tret = -1;\n"
-            string += "\t\t\tgoto free;\n"
-            string += "\t\t}\n"
-            string += "\t\tdbus_message_iter_init_append(reply, &iter);\n"
-            for x in self.attributes:
-                if x.direction == "out":
-                    string += "\t\t" + ";\n\t".join(y for y in x.CPack()) + ";\n"
-
-            string += "\t\t" + self.CallCFreeFunction() + ";\n"
+        # else, pack the variables and send the reply message
+        string += "\t\treply = dbus_message_new_method_return(msg);\n"
+        string += "\t\tif (!reply) {\n"
+        string += "\t\t\tret = -1;\n"
+        string += "\t\t\tgoto free;\n"
+        string += "\t\t}\n"
+        string += "\t\tdbus_message_iter_init_append(reply, &iter);\n"
+        for x in self.attributes:
+            if x.direction == "out":
+                string += "\t\t" + ";\n\t".join(y for y in x.CPack()) + ";\n"
+        string += "\n"
+        string += "\t\t" + self.CallCFreeFunction() + ";\n"
         string += "\t}\n"
 
         string += "\tdbus_connection_send(cnx, reply, NULL);\n"
@@ -495,17 +493,71 @@ class DBusMessage:
             if len(attrfree) != 0:
                 string += "\t" + ";\n\t".join(y for y in attrfree) + ";\n" 
         string += "\treturn ret;\n"
-        string += "}"
+        string += "}\n"
+        return string
+
+
+class DBusSignal:
+    def __init__(self, name, interface, obj, attributes):
+        self.name = name
+        self.attributes = attributes
+        self.interface = interface
+        self.object = obj
+
+    def CPrototype(self):
+        string = "int " 
+        string += self.interface.CName() + '_' 
+        string += self.name
+        attributes = [x.CVarProto() for x in self.attributes]
+        string += "(DBusConnection *cnx, " + ', '.join(attributes) + ");\n"
+        return string
+
+    def CFunction(self):
+        string = "int "
+        string += self.interface.CName() + '_' 
+        string += self.name
+        string += "(DBusConnection *cnx, "
+        attributes = [x.CVarProto() for x in self.attributes]
+        string += ', '.join(attributes)
+        string += ")\n"
+        string += "{\n"
+        string += "\tint ret;\n"
+        string += "\tDBusMessage * msg;\n"
+        string += "\tDBusMessageIter iter;\n"
+        string += "\n"
+
+        string += "\tmsg = dbus_message_new_signal(\"" + self.object.name + "\", \"" + self.interface.name + "\", \"" + self.name + "\");\n"
+        string += "\tif (!msg) {\n"
+        string += "\t\treturn -1;\n"
+        string += "\t}\n"
+
+        # pack the variables and send the message
+        string += "\tdbus_message_iter_init_append(msg, &iter);\n"
+        for x in self.attributes:
+            string += "\t" + ";\n\t".join(y for y in x.CPack()) + ";\n"
+        string += "\n"
+
+        string += "\tdbus_connection_send(cnx, msg, NULL);\n"
+        string += "\tdbus_message_unref(msg);\n"
+
+        string += "\n"
+        
+        string += "\treturn 0;\n"
+        string += "}\n"
         return string
 
 
 class DBusInterface:
     def __init__(self,name):
         self.name = name
-        self.messages = {}
+        self.methods = {}
+        self.signals = {}
 
-    def AddMessage(self, message):
-        self.messages[message.name] = message
+    def AddMethod(self, method):
+        self.methods[method.name] = method
+
+    def AddSignal(self, signal):
+        self.signals[signal.name] = signal
 
     def CName(self):
         return self.name.replace('.', '_')
@@ -515,7 +567,7 @@ class DBusInterface:
 
     def CTable(self):
         string = "struct cdbus_interface_entry_t " + self.CTableName() + "[] = {\n"
-        string += "\t" + ",\n\t".join("{\"" + key + "\", " + self.messages[key].CProxyName() + "}" for key in self.messages) + ",\n"
+        string += "\t" + ",\n\t".join("{\"" + key + "\", " + self.methods[key].CProxyName() + "}" for key in self.methods) + ",\n"
         string += "\t{NULL, NULL},\n"
         string += "};\n"
         return string
@@ -563,23 +615,29 @@ class DBusObject:
         string += "/* Generated types */\n"
         string += "\n"
         for key in self.interfaces:
-            for msg in self.interfaces[key].messages:
-                for attr in self.interfaces[key].messages[msg].attributes:
+            for msg in self.interfaces[key].methods:
+                for attr in self.interfaces[key].methods[msg].attributes:
                     for typestring in attr.type.CTypeDef(attr.name):
                         string += typestring
         string += "\n"
         string += "/* Functions implemented by the library user */\n"
         string += "\n"
         for key in self.interfaces:
-            for msg in self.interfaces[key].messages:
-                string += self.interfaces[key].messages[msg].CPrototype()
-                string += self.interfaces[key].messages[msg].CFreeFunctionPrototype()
+            for msg in self.interfaces[key].methods:
+                string += self.interfaces[key].methods[msg].CPrototype()
+                string += self.interfaces[key].methods[msg].CFreeFunctionPrototype()
+        string += "\n"
+        string += "/* Public functions */\n"
+        string += "\n"
+        for key in self.interfaces:
+            for msg in self.interfaces[key].signals:
+                string += self.interfaces[key].signals[msg].CPrototype()
         string += "\n"
         string += "/* Private declarations, you should don't have to touch it */\n"
         string += "\n"
         for key in self.interfaces:
-            for msg in self.interfaces[key].messages:
-                string += self.interfaces[key].messages[msg].CProxyPrototype()
+            for msg in self.interfaces[key].methods:
+                string += self.interfaces[key].methods[msg].CProxyPrototype()
             string += "\n"
             string += self.interfaces[key].CTableHeader()
         string += self.CTableHeader()
@@ -598,18 +656,24 @@ class DBusObject:
         string += self.CTable()
         string += "\n"
         for key in self.interfaces:
-            for msg in self.interfaces[key].messages:
-                for attr in self.interfaces[key].messages[msg].attributes:
+            for msg in self.interfaces[key].methods:
+                for attr in self.interfaces[key].methods[msg].attributes:
                     if attr.direction == "in":
                         for funcstring in attr.type.CUnpackFunctions(attr.name):
                             string += funcstring + "\n"
                     if attr.direction == "out":
                         for funcstring in attr.type.CPackFunctions(attr.name):
                             string += funcstring + "\n"
+            for msg in self.interfaces[key].signals:
+                for attr in self.interfaces[key].signals[msg].attributes:
+                    for funcstring in attr.type.CPackFunctions(attr.name):
+                        string += funcstring + "\n"
 
         for key in self.interfaces:
-            for msg in self.interfaces[key].messages:
-                string += self.interfaces[key].messages[msg].CProxyCode()
+            for msg in self.interfaces[key].methods:
+                string += self.interfaces[key].methods[msg].CProxy() + "\n"
+            for msg in self.interfaces[key].signals:
+                string += self.interfaces[key].signals[msg].CFunction() + "\n"
 
         return string
 
@@ -621,21 +685,35 @@ current_method = ""
 current_signal = ""
 current_args = []
 
-def args2attribute(args):
+def args2attribute(args, force_direction_in=False):
     attributes = []
     for arg in args:
-        attributes.append(DBusAttribute(arg['name'],
-                                        DBusSignature(arg['type']),
-                                        arg['direction']))
+        if force_direction_in:
+            attributes.append(DBusAttribute(arg['name'],
+                                            DBusSignature(arg['type']),
+                                            "in"))
+        else:
+            attributes.append(DBusAttribute(arg['name'],
+                                            DBusSignature(arg['type']),
+                                            arg['direction']))
+
     return attributes
 
-def add_message(is_signal):
+def add_method():
     global current_interface, current_node, objects
     global current_method, current_args
     dbusinterface = objects[current_node].Interface(current_interface)
     attributes = args2attribute(current_args)
-    message = DBusMessage(current_method, dbusinterface, attributes, is_signal)
-    dbusinterface.AddMessage(message)
+    method = DBusMethod(current_method, dbusinterface, attributes)
+    dbusinterface.AddMethod(method)
+
+def add_signal():
+    global current_interface, current_node, objects
+    global current_signal, current_args
+    dbusinterface = objects[current_node].Interface(current_interface)
+    attributes = args2attribute(current_args, True)
+    signal = DBusSignal(current_signal, dbusinterface, objects[current_node], attributes)
+    dbusinterface.AddSignal(signal)
     
 def start_element_handler(name, attr):
     global current_interface, current_node, objects
@@ -649,8 +727,10 @@ def start_element_handler(name, attr):
         dbusinterface = DBusInterface(attr['name'])
         objects[current_node].AddInterface(dbusinterface)
     if name == "method":
+        current_args = []
         current_method = attr['name']
     if name == "signal":
+        current_args = []
         current_signal = attr['name']
     if name == "arg":
         current_args.append(attr)
@@ -658,9 +738,9 @@ def start_element_handler(name, attr):
 def end_element_handler(name):
     global current_node
     if name == "method":
-        add_message(False)
+        add_method()
     if name == "signal":
-        add_message(True)
+        add_signal()
     if name == "node":
         f = open(objects[current_node].CHeaderFileName(), "w")
         f.write(objects[current_node].CHeader())
