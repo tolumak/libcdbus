@@ -592,7 +592,7 @@ static DBusObjectPathVTable vtable = {
 	.message_function = object_dispatch,
 };
 
-int cdbus_object_register(DBusConnection * cnx, const char * path,
+int cdbus_register_object(DBusConnection * cnx, const char * path,
 			struct cdbus_object_entry_t * object_table)
 {
 	int ret;

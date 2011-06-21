@@ -23,7 +23,7 @@ int cdbus_timeout_handle();
 
 /* Objects management */
 struct cdbus_object_entry_t;
-int cdbus_object_register(DBusConnection * cnx, const char * path,
+int cdbus_register_object(DBusConnection * cnx, const char * path,
 			struct cdbus_object_entry_t * table);
 
 
