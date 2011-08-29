@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 2.6)
 project(libcdbus)
 
+if(NOT CMAKE_C_FLAGS)
+set(CMAKE_C_FLAGS "-Wall" CACHE STRING "Flags used by the compiler during all build types" FORCE)
+endif(NOT CMAKE_C_FLAGS)
+
 # Options
 set(LOG_LEVEL 4 CACHE STRING "Log level")
 set(BUILD_TEST_APP NO CACHE BOOL "Build test app")
