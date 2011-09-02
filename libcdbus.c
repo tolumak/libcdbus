@@ -795,7 +795,7 @@ DBusHandlerResult object_dispatch(DBusConnection *cnx,
 	if (interface) {
 		fcn = find_method_with_interface(interface, member, table);
 	} else {
-		find_method_all_interfaces(member, table);
+		fcn = find_method_all_interfaces(member, table);
 	}
 
 	if (!fcn) {
