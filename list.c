@@ -97,9 +97,11 @@ int __list_insert_before(struct list_item_t *item, struct list_item_t *next)
 	item->prev = next->prev;
 	next->prev = item;
 	item->list = next->list;
-	if (item->prev = NULL)
+	if (item->prev == NULL)
 		next->list->head = item;
 	next->list->nb++;
+
+	return 0;
 }
 
 int __list_rem_item(struct list_item_t *item)
