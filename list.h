@@ -10,6 +10,7 @@
 #define __LIBCDBUS_LIST_H
 
 #include <pthread.h>
+#include <stddef.h>
 
 struct list_t;
 
