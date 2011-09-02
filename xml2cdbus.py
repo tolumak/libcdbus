@@ -540,7 +540,6 @@ class DBusSignal:
         string += ', '.join(attributes)
         string += ")\n"
         string += "{\n"
-        string += "\tint ret;\n"
         string += "\tDBusMessage * msg;\n"
         string += "\tDBusMessageIter iter;\n"
         string += "\n"
