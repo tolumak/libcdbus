@@ -189,10 +189,6 @@ dbus_bool_t add_timeout(DBusTimeout *dbtimeout, void *data)
 	timeout_toggled(timeout->dbtimeout, data);
 
 	return TRUE;
-
-err_free:
-	free(timeout);
-	return FALSE;
 }
 
 void rem_timeout(DBusTimeout *dbtimeout, void *data)
@@ -700,6 +696,7 @@ int generate_interface_xml(struct extensible_string_t * str,
 	if (ret < 0)
 		return -1;
 
+	return 0;
 }
 
 
