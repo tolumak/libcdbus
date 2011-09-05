@@ -400,24 +400,24 @@ class DBusMethod:
         string = "int " 
         string += self.CName()
         attributes = [x.CVarProto() for x in self.attributes]
-        string += "(" + ', '.join(attributes) + ");\n"
+        string += "(DBusConnection *cnx, DBusMessage *msg, " + ', '.join(attributes) + ");\n"
         return string
 
     def CallCFunction(self):
         string = self.CName()
-        string += "(" + ', '.join(x.CVar() for x in self.attributes) + ")"
+        string += "(cnx, msg, " + ', '.join(x.CVar() for x in self.attributes) + ")"
         return string
 
     def CFreeFunctionPrototype(self):
         string = "void " 
         string += self.CName() + "_free"
         attributes = [x.CVarProto() for x in self.attributes]
-        string += "(" + ', '.join(attributes) + ");\n"
+        string += "(DBusConnection *cnx, DBusMessage *msg, " + ', '.join(attributes) + ");\n"
         return string
 
     def CallCFreeFunction(self):
         string = self.CName() + "_free"
-        string += "(" + ', '.join(x.CVar() for x in self.attributes) + ")"
+        string += "(cnx, msg, " + ', '.join(x.CVar() for x in self.attributes) + ")"
         return string
 
     def CProxyName(self):

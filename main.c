@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <errno.h>
 #include "libcdbus.h"
 #include "fr_sise_test.h"
@@ -12,7 +13,7 @@
 
 static int done = 0;
 
-int fr_sise_test_Hello(char * who, char ** out)
+int fr_sise_test_Hello(DBusConnection *cnx, DBusMessage *msg, char * who, char ** out)
 {
 	*out = malloc(sizeof(char) * 128);
 	if (!*out)
@@ -27,7 +28,7 @@ int fr_sise_test_Hello(char * who, char ** out)
 	return 0;
 }
 
-void fr_sise_test_Hello_free(char * who, char ** out)
+void fr_sise_test_Hello_free(DBusConnection *cnx, DBusMessage *msg, char * who, char ** out)
 {
 	if (*out)
 		free(*out);
