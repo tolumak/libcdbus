@@ -1,3 +1,11 @@
+/*
+ * D-Bus C Bindings library: test program
+ *
+ * Copyright 2011 S.I.S.E. S.A
+ * Author: Michel Lafon-Puyo <mlafon-puyo@sise.fr>
+ *
+ */
+
 #include <stdio.h>
 #include <signal.h>
 #include <string.h>
