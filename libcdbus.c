@@ -804,8 +804,8 @@ DBusHandlerResult object_dispatch(DBusConnection *cnx,
 
 	ret = fcn(cnx, msg);
 	if (ret < 0)
-		LOG(LOG_WARNING, "Failed to execute handler for member %s"
-			"of object %s", member, dbus_message_get_path(msg));
+		LOG(LOG_WARNING, "Failed to execute handler for member %s "
+			"of object %s\n", member, dbus_message_get_path(msg));
 
 	return DBUS_HANDLER_RESULT_HANDLED;
 }
