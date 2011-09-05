@@ -232,7 +232,7 @@ class DBusSignature:
         string = "int cdbus_pack_" + varname + "_struct(DBusMessageIter *iter, " + self.CVarProto("in", varname) + ")\n"
         string += "{\n"
         string += "\tDBusMessageIter sub_iter;\n"
-        string += "\tdbus_message_iter_open_container(iter, " + self.DBusType() + ", \"" + self.SubSignature() + "\", &sub_iter);\n"
+        string += "\tdbus_message_iter_open_container(iter, " + self.DBusType() + ", NULL, &sub_iter);\n"
         for x in self.subs:
             string += "\t" + ";\n\t".join(y for y in x.CPack(varname, str(self.subs.index(x)), "sub_iter")) + ";\n"
         string += "\tdbus_message_iter_close_container(iter, &sub_iter);\n"
@@ -311,17 +311,18 @@ class DBusSignature:
         string += "\tDBusMessageIter sub_iter;\n"
         string += "\t*" + varname + "_len = 0;\n"
         string += "\tdbus_message_iter_recurse(iter, &sub_iter);\n"
-        string += "\twhile(dbus_message_iter_has_next(&sub_iter)) {\n"
+        string += "\tdo {\n"
         string += "\t\t(*" + varname + "_len)++;\n"
-        string += "\t\tdbus_message_iter_next(&sub_iter);\n"
-        string += "\t}\n"
+        string += "\t} while(dbus_message_iter_next(&sub_iter));\n"
         string += "\t*" + varname + " = malloc(sizeof(**" + varname + ") * (*" + varname + "_len));\n"  
         string += "\t*" + varname + "_len = 0;\n"
         string += "\tdbus_message_iter_recurse(iter, &sub_iter);\n"
-        string += "\twhile(dbus_message_iter_has_next(&sub_iter)) {\n"
+        string += "\twhile(1) {\n"
+        string += "\t\tint dont_stop;\n"
+        string += "\t\tdont_stop = dbus_message_iter_has_next(&sub_iter);\n"
         for x in self.subs:
             string += "\t\t" + "\n\t\t".join(y for y in x.CUnpack(varname, "(*" + varname + "_len)++", "sub_iter", True)) + "\n"
-        string += "\t\tdbus_message_iter_next(&sub_iter);\n"
+        string += "\t\tif (!dont_stop) break;\n"
         string += "\t}\n"
         string += "\treturn 0;\n"
         string += "}\n"
@@ -459,8 +460,6 @@ class DBusMethod:
         string += "\t\t\tret = -1;\n"
         string += "\t\t\tgoto free;\n"
         string += "\t\t}\n"
-        string += "\t\tdbus_connection_send(cnx, reply, NULL);\n"
-        string += "\t\tdbus_message_unref(reply);\n"
 
         string += "\t} else {\n"
 
@@ -729,15 +728,15 @@ current_method = ""
 current_signal = ""
 current_args = []
 
-def args2attribute(args, force_direction_in=False):
+def args2attribute(method, args, force_direction_in=False):
     attributes = []
     for arg in args:
         if force_direction_in:
-            attributes.append(DBusAttribute(arg['name'],
+            attributes.append(DBusAttribute(method + '_' + arg['name'],
                                             DBusSignature(arg['type']),
                                             "in"))
         else:
-            attributes.append(DBusAttribute(arg['name'],
+            attributes.append(DBusAttribute(method + '_' + arg['name'],
                                             DBusSignature(arg['type']),
                                             arg['direction']))
 
@@ -747,7 +746,7 @@ def add_method():
     global current_interface, current_node, objects
     global current_method, current_args
     dbusinterface = objects[current_node].Interface(current_interface)
-    attributes = args2attribute(current_args)
+    attributes = args2attribute(current_method, current_args)
     method = DBusMethod(current_method, dbusinterface, attributes)
     dbusinterface.AddMethod(method)
 
@@ -755,7 +754,7 @@ def add_signal():
     global current_interface, current_node, objects
     global current_signal, current_args
     dbusinterface = objects[current_node].Interface(current_interface)
-    attributes = args2attribute(current_args, True)
+    attributes = args2attribute(current_signal, current_args, True)
     signal = DBusSignal(current_signal, dbusinterface, objects[current_node], attributes)
     dbusinterface.AddSignal(signal)
     
