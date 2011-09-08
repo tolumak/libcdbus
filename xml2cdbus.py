@@ -652,6 +652,10 @@ class DBusObject:
                 for attr in msg.attributes:
                     for typestring in attr.type.CTypeDef(attr.name):
                         string += typestring
+            for msg in itf.signals.values():
+                for attr in msg.attributes:
+                    for typestring in attr.type.CTypeDef(attr.name):
+                        string += typestring
         string += "\n"
         string += "/* Functions implemented by the library user */\n"
         string += "\n"
