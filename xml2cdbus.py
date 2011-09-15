@@ -401,24 +401,36 @@ class DBusMethod:
         string = "int " 
         string += self.CName()
         attributes = [x.CVarProto() for x in self.attributes]
-        string += "(DBusConnection *cnx, DBusMessage *msg, " + ', '.join(attributes) + ");\n"
+        string += "(DBusConnection *cnx, DBusMessage *msg"
+        if attributes:
+            string += ", "
+        string += ', '.join(attributes) + ");\n"
         return string
 
     def CallCFunction(self):
         string = self.CName()
-        string += "(cnx, msg, " + ', '.join(x.CVar() for x in self.attributes) + ")"
+        string += "(cnx, msg"
+        if self.attributes:
+            string += ", " 
+        string += ', '.join(x.CVar() for x in self.attributes) + ")"
         return string
 
     def CFreeFunctionPrototype(self):
         string = "void " 
         string += self.CName() + "_free"
         attributes = [x.CVarProto() for x in self.attributes]
-        string += "(DBusConnection *cnx, DBusMessage *msg, " + ', '.join(attributes) + ");\n"
+        string += "(DBusConnection *cnx, DBusMessage *msg"
+        if attributes:
+            string += ", " 
+        string += ', '.join(attributes) + ");\n"
         return string
 
     def CallCFreeFunction(self):
         string = self.CName() + "_free"
-        string += "(cnx, msg, " + ', '.join(x.CVar() for x in self.attributes) + ")"
+        string += "(cnx, msg"
+        if self.attributes:
+            string += ", " 
+        string += ', '.join(x.CVar() for x in self.attributes) + ")"
         return string
 
     def CProxyName(self):
@@ -528,14 +540,19 @@ class DBusSignal:
         string = "int " 
         string += self.CName()
         attributes = [x.CVarProto() for x in self.attributes]
-        string += "(DBusConnection *cnx, " + ', '.join(attributes) + ");\n"
+        string += "(DBusConnection *cnx"
+        if attributes:
+            string += ", " 
+        string += ', '.join(attributes) + ");\n"
         return string
 
     def CFunction(self):
         string = "int "
         string += self.CName()
-        string += "(DBusConnection *cnx, "
+        string += "(DBusConnection *cnx"
         attributes = [x.CVarProto() for x in self.attributes]
+        if attributes:
+            string += ", "
         string += ', '.join(attributes)
         string += ")\n"
         string += "{\n"
