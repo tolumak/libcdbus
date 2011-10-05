@@ -5,20 +5,24 @@ if(NOT CMAKE_C_FLAGS)
 set(CMAKE_C_FLAGS "-Wall" CACHE STRING "Flags used by the compiler during all build types" FORCE)
 endif(NOT CMAKE_C_FLAGS)
 
+set(LOG_APP_NAME libcdbus STRING "Application name")
+
 # Options
 set(LOG_LEVEL 4 CACHE STRING "Log level")
 set(BUILD_TEST_APP NO CACHE BOOL "Build test app")
 
 configure_file (
-  "${PROJECT_SOURCE_DIR}/config.h.in"
+  "${PROJECT_SOURCE_DIR}/../common/config.h.in"
   "${PROJECT_BINARY_DIR}/config.h"
 )
 
 include_directories(${PROJECT_BINARY_DIR})
 include_directories(${PROJECT_SOURCE_DIR})
+include_directories(${PROJECT_SOURCE_DIR}/../common)
 include_directories(${CMAKE_MV2_ENV_SYSROOT}/usr/include/dbus-1.0/)
 include_directories(${CMAKE_MV2_ENV_SYSROOT}/usr/lib/dbus-1.0/include)
-set(SRCS libcdbus.c list.c)
+
+set(SRCS libcdbus.c ../common/list.c)
 
 add_library(cdbus SHARED ${SRCS})
 target_link_libraries(cdbus dbus-1)
