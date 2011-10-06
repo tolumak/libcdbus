@@ -5,7 +5,7 @@ if(NOT CMAKE_C_FLAGS)
 set(CMAKE_C_FLAGS "-Wall" CACHE STRING "Flags used by the compiler during all build types" FORCE)
 endif(NOT CMAKE_C_FLAGS)
 
-set(LOG_APP_NAME libcdbus STRING "Application name")
+set(LOG_APP_NAME libcdbus)
 
 # Options
 set(LOG_LEVEL 4 CACHE STRING "Log level")
