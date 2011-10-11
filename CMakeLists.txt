@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 2.6)
 project(libcdbus)
 
+if(NOT CMAKE_BUILD_TYPE)
+set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build, options are: None(CMAKE_CXX_FLAGS or CMAKE_C_FLAGS used) Debug Release RelWithDebInfo MinSizeRel." FORCE)
+endif(NOT CMAKE_BUILD_TYPE)
+
 if(NOT CMAKE_C_FLAGS)
 set(CMAKE_C_FLAGS "-Wall" CACHE STRING "Flags used by the compiler during all build types" FORCE)
 endif(NOT CMAKE_C_FLAGS)
