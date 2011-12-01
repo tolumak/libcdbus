@@ -25,6 +25,7 @@ int cdbus_timeout_handle();
 struct cdbus_interface_entry_t;
 int cdbus_register_object(DBusConnection * cnx, const char * path,
 			struct cdbus_interface_entry_t * table);
+int cdbus_unregister_object(DBusConnection * cnx, const char * path);
 
 
 /* Private declarations */

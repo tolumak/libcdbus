@@ -826,3 +826,12 @@ int cdbus_register_object(DBusConnection * cnx, const char * path,
 
 	return 0;
 }
+
+int cdbus_unregister_object(DBusConnection * cnx, const char * path)
+{
+	int ret;
+	ret = dbus_connection_unregister_object_path(cnx, path);
+	if (ret == FALSE)
+		return -1;
+	return 0;
+}
