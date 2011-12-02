@@ -208,8 +208,11 @@ class DBusSignature:
             strings.append("dbus_message_iter_append_basic(&" + iterator + ", " + self.DBusType() + ", &" + param + ")")
         if self.IsArray():
             strings.append("cdbus_pack_" + varname + "_array(&" + iterator + ", " + param + ", " + param + "_len)")
-        if self.IsStruct():
-            strings.append("cdbus_pack_" + varname + "_struct(&" + iterator + ", &" + param + ")")
+        if self.IsStruct(): 
+            if member != "":
+                param = "&" + param;
+            strings.append("cdbus_pack_" + varname + "_struct(&" + iterator + ", " + param + ")")
+                
         return strings
 
     def CPackFunctions(self, varname):
