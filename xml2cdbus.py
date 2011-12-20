@@ -205,7 +205,10 @@ class DBusSignature:
             else:
                 param = param + "[" + str(member) + "]"
         if self.IsPrimitive():
-            strings.append("dbus_message_iter_append_basic(&" + iterator + ", " + self.DBusType() + ", &" + param + ")")
+            if self.signature == "s":
+                strings.append("dbus_message_iter_append_basic(&" + iterator + ", " + self.DBusType() + ", " + param + " ? &" + param + " : &null_string)")
+            else:
+                strings.append("dbus_message_iter_append_basic(&" + iterator + ", " + self.DBusType() + ", &" + param + ")")
         if self.IsArray():
             strings.append("cdbus_pack_" + varname + "_array(&" + iterator + ", " + param + ", " + param + "_len)")
         if self.IsStruct(): 
@@ -712,6 +715,8 @@ class DBusObject:
         string += "\n"
         string += "#include <stdlib.h>\n"
         string += "#include \"" + self.CHeaderFileName() + "\"\n"
+        string += "\n"
+        string += "static char * null_string = \"\";\n";
         string += "\n"
         for itf in self.interfaces.values():
             for msg in itf.methods.values():
