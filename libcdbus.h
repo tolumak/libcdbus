@@ -15,6 +15,8 @@
 DBusConnection* cdbus_get_connection(DBusBusType bus_type, char *name,
 				int replace);
 
+const char * cdbus_version_string();
+
 /* Main loop functions */
 int cdbus_build_pollfds(struct pollfd ** fds, int *nfds, int reserve_slots);
 int cdbus_process_pollfds(struct pollfd * fds, int nfds);

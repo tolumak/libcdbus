@@ -9,6 +9,10 @@ if(NOT CMAKE_C_FLAGS)
 set(CMAKE_C_FLAGS "-Wall" CACHE STRING "Flags used by the compiler during all build types" FORCE)
 endif(NOT CMAKE_C_FLAGS)
 
+add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/version.c ${PROJECT_BINARY_DIR}/version.h
+  COMMAND echo 'extern const char * version_string\;' > ${PROJECT_BINARY_DIR}/version.h
+  COMMAND git describe --tags --dirty --match="${CMAKE_PROJECT_NAME}-*" | sed 's/^${CMAKE_PROJECT_NAME}-\\\(.*\\\)/const char * version_string="\\1"\;/' > ${PROJECT_BINARY_DIR}/version.c
+)
 
 # Options
 set(LOG_LEVEL 4 CACHE STRING "Log level")
@@ -25,7 +29,7 @@ include_directories(${PROJECT_SOURCE_DIR}/../common)
 include_directories(${CMAKE_MV2_ENV_SYSROOT}/usr/include/dbus-1.0/)
 include_directories(${CMAKE_MV2_ENV_SYSROOT}/usr/lib/dbus-1.0/include)
 
-set(SRCS libcdbus.c ../common/list.c)
+set(SRCS libcdbus.c ../common/list.c version.c)
 
 add_library(cdbus SHARED ${SRCS})
 target_link_libraries(cdbus dbus-1)

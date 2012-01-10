@@ -14,6 +14,7 @@
 #include "list.h"
 #include "libcdbus.h"
 #include "log.h"
+#include "version.h"
 
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 #define EXTSTR_BUFF_SIZE 16
@@ -302,6 +303,11 @@ connection_unref:
 	dbus_connection_unref(cnx);
 err:
 	return NULL;
+}
+
+const char * cdbus_version_string()
+{
+	return version_string;
 }
 
 /*
