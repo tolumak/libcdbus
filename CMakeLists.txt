@@ -1,21 +1,12 @@
 cmake_minimum_required(VERSION 2.6)
 project(libcdbus)
 
-if(NOT CMAKE_BUILD_TYPE)
-set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build, options are: None(CMAKE_CXX_FLAGS or CMAKE_C_FLAGS used) Debug Release RelWithDebInfo MinSizeRel." FORCE)
-endif(NOT CMAKE_BUILD_TYPE)
-
-if(NOT CMAKE_C_FLAGS)
-set(CMAKE_C_FLAGS "-Wall" CACHE STRING "Flags used by the compiler during all build types" FORCE)
-endif(NOT CMAKE_C_FLAGS)
-
-add_custom_command(OUTPUT ${PROJECT_BINARY_DIR}/version.c ${PROJECT_BINARY_DIR}/version.h
-  COMMAND echo 'extern const char * version_string\;' > ${PROJECT_BINARY_DIR}/version.h
-  COMMAND git describe --tags --dirty --match="${CMAKE_PROJECT_NAME}-*" | sed 's/^${CMAKE_PROJECT_NAME}-\\\(.*\\\)/const char * version_string="\\1"\;/' > ${PROJECT_BINARY_DIR}/version.c
-)
+include(../common/defaults.cmake)
+include(../common/version.cmake)
+include(../common/log.cmake)
+include(../common/dbus.cmake)
 
 # Options
-set(LOG_LEVEL 4 CACHE STRING "Log level")
 set(BUILD_TEST_APP NO CACHE BOOL "Build test app")
 
 configure_file (
@@ -29,20 +20,19 @@ include_directories(${PROJECT_SOURCE_DIR}/../common)
 include_directories(${CMAKE_MV2_ENV_SYSROOT}/usr/include/dbus-1.0/)
 include_directories(${CMAKE_MV2_ENV_SYSROOT}/usr/lib/dbus-1.0/include)
 
-set(SRCS libcdbus.c ../common/list.c version.c)
+set(SRCS libcdbus.c ../common/list.c)
+
+version_file_c(SRCS)
 
 add_library(cdbus SHARED ${SRCS})
+version_add_dependencies(cdbus)
 target_link_libraries(cdbus dbus-1)
 install(TARGETS cdbus DESTINATION usr/lib)
 
 if (BUILD_TEST_APP)
 # Test exectutable
-add_custom_command(OUTPUT fr_sise_test.c
-			  COMMAND ${PROJECT_SOURCE_DIR}/xml2cdbus.py ${PROJECT_SOURCE_DIR}/test_introspect.xml
-			  DEPENDS ${PROJECT_SOURCE_DIR}/xml2cdbus.py ${PROJECT_SOURCE_DIR}/test_introspect.xml)
-
 set(TEST_SRCS main.c fr_sise_test.c)
-
+add_cdbus_object(TEST_SRCS fr/sise/test ${PROJECT_SOURCE_DIR}/test_introspect.xml)
 add_executable(test ${TEST_SRCS})
 target_link_libraries(test cdbus)
 endif (BUILD_TEST_APP)
