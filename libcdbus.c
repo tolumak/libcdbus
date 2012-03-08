@@ -307,7 +307,7 @@ err:
 
 const char * cdbus_version_string()
 {
-	return version_string;
+	return libcdbus_version_string;
 }
 
 /*
