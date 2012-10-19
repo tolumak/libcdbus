@@ -393,10 +393,13 @@ int cdbus_process_pollfds(struct pollfd * fds, int nfds)
 		goto free;
 
 	list_lock(&watch_list);
-
 	item = __list_get_first(&watch_list);
+	list_unlock(&watch_list);
 	while (item) {
+		list_lock(&watch_list);
 		watch = container_of(item, struct watch_t, litem);
+		item = __list_get_next(item);
+		list_unlock(&watch_list);
 		fd = dbus_watch_get_unix_fd(watch->dbwatch);
 		if (watch->pollfd && (fd >=0)) {
 			if (watch->pollfd->revents) {
@@ -414,10 +417,8 @@ int cdbus_process_pollfds(struct pollfd * fds, int nfds)
 			}
 		}
 
-		item = __list_get_next(item);
 	}
 
-	list_unlock(&watch_list);
 
 free:
 	free(fds);
@@ -485,9 +486,12 @@ int cdbus_timeout_handle()
 	/* Handle the timers that had expired */
 	list_lock(&expired);
 	item = __list_get_first(&expired);
+	list_unlock(&expired);
 	while (item) {
+		list_lock(&expired);
 		timeout = container_of(item, struct timeout_t, ordered);
 		item = __list_get_next(item);
+		list_unlock(&expired);
 		__list_rem_item(&timeout->ordered);
 
 		if (timeout->dbtimeout) {
@@ -504,7 +508,6 @@ int cdbus_timeout_handle()
 			}
 		}
 	}
-	list_unlock(&timeout_ordered_list);
 
 post_update:
 	previous.tv_sec = now.tv_sec;
