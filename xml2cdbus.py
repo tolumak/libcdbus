@@ -403,41 +403,42 @@ class DBusMethod:
         self.attributes = attributes
         self.interface = interface
 
-    def CPrototype(self):
-        string = "int " 
-        string += self.CName()
+    def CFunctionPointer(self):
+        string = "int (*" + self.name + ")"
         attributes = [x.CVarProto() for x in self.attributes]
         string += "(DBusConnection *cnx, DBusMessage *msg"
         if attributes:
             string += ", "
-        string += ', '.join(attributes) + ");\n"
-        return string
+        string += ', '.join(attributes) + ");"
+        return string;
 
-    def CallCFunction(self):
-        string = self.CName()
-        string += "(cnx, msg"
-        if self.attributes:
-            string += ", " 
-        string += ', '.join(x.CVar() for x in self.attributes) + ")"
-        return string
-
-    def CFreeFunctionPrototype(self):
-        string = "void " 
-        string += self.CName() + "_free"
+    def CFreeFunctionPointer(self):
+        string = "void (*" + self.name + "_free)"
         attributes = [x.CVarProto() for x in self.attributes]
         string += "(DBusConnection *cnx, DBusMessage *msg"
         if attributes:
-            string += ", " 
-        string += ', '.join(attributes) + ");\n"
-        return string
+            string += ", "
+        string += ', '.join(attributes) + ");"
+        return string;    
 
-    def CallCFreeFunction(self):
-        string = self.CName() + "_free"
+    def CallCFunctionWithRet(self):
+        string = "ret = -1 ; if (" + self.interface.COps() + '.' + self.name + ") ret = " 
+        string += self.interface.COps() + '.' + self.name
         string += "(cnx, msg"
         if self.attributes:
             string += ", " 
         string += ', '.join(x.CVar() for x in self.attributes) + ")"
         return string
+
+    def CallCFreeFunction(self):
+        string = "if (" + self.interface.COps() + '.' + self.name + "_free) " 
+        string += self.interface.COps() + '.' + self.name + "_free";
+        string += "(cnx, msg"
+        if self.attributes:
+            string += ", " 
+        string += ', '.join(x.CVar() for x in self.attributes) + ")"
+        return string
+
 
     def CProxyName(self):
         string = self.CName() + "_proxy"
@@ -467,7 +468,7 @@ class DBusMethod:
         string += "\n"
 
         # Call the real functions
-        string += "\tret = " + self.CallCFunction() + ";\n"
+        string += "\t" + self.CallCFunctionWithRet() + ";\n"
         string += "\n"
 
         string += "\tif (ret < 0) {\n"
@@ -511,9 +512,7 @@ class DBusMethod:
         return string
 
     def CName(self):
-        string = self.interface.CName() + '_' 
-        string += self.name
-        return string
+        return self.interface.CName() + '_' + self.name;
 
     def CTableHeader(self):
         return "extern struct cdbus_arg_entry_t " + self.CTableName() + "[];\n"
@@ -618,6 +617,18 @@ class DBusInterface:
     def CTableHeader(self):
         return "extern struct cdbus_message_entry_t " + self.CTableName() + "[];\n"
 
+    def COps(self):
+        return self.CName() + "_ops"
+
+    def COpsPrototype(self):
+        string = "extern struct "
+        string += self.COps() + " {\n";
+        for (name, method) in self.methods.items():
+            string += "\t" + method.CFunctionPointer() + "\n"
+            string += "\t" + method.CFreeFunctionPointer() + "\n"
+        string += "} "+ self.COps() + ";\n"
+        return string
+
     def CTable(self):
         string = "struct cdbus_message_entry_t " + self.CTableName() + "[] = {\n"
         for (name, method) in self.methods.items():
@@ -683,9 +694,7 @@ class DBusObject:
         string += "/* Functions implemented by the library user */\n"
         string += "\n"
         for itf in self.interfaces.values():
-            for msg in itf.methods.values():
-                string += msg.CPrototype()
-                string += msg.CFreeFunctionPrototype()
+            string += itf.COpsPrototype()
         string += "\n"
         string += "/* Public functions */\n"
         string += "\n"
@@ -775,7 +784,7 @@ def add_method():
     global current_interface, current_node, objects
     global current_method, current_args
     dbusinterface = objects[current_node].Interface(current_interface)
-    attributes = args2attribute(current_method, current_args)
+    attributes = args2attribute(dbusinterface.CName() + '_' + current_method, current_args)
     method = DBusMethod(current_method, dbusinterface, attributes)
     dbusinterface.AddMethod(method)
 
@@ -783,7 +792,7 @@ def add_signal():
     global current_interface, current_node, objects
     global current_signal, current_args
     dbusinterface = objects[current_node].Interface(current_interface)
-    attributes = args2attribute(current_signal, current_args, True)
+    attributes = args2attribute(dbusinterface.CName() + '_'  + current_signal, current_args, True)
     signal = DBusSignal(current_signal, dbusinterface, objects[current_node], attributes)
     dbusinterface.AddSignal(signal)
     
