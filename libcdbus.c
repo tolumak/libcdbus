@@ -48,7 +48,6 @@ struct timeout_t {
 	void * cb_data;
 };
 
-
 static DECLARE_LIST_INIT(watch_list);
 static DECLARE_LIST_INIT(timeout_ordered_list);
 
@@ -780,7 +779,8 @@ DBusHandlerResult object_dispatch(DBusConnection *cnx,
 			DBusMessage *msg,
 			void *data)
 {
-	struct cdbus_interface_entry_t * table = data;
+	struct cdbus_user_data_t * user_data = data;
+	struct cdbus_interface_entry_t * table;
 	const char * interface;
 	const char * member;
 	cdbus_proxy_fcn_t fcn;
@@ -788,6 +788,9 @@ DBusHandlerResult object_dispatch(DBusConnection *cnx,
 
 	if (!data)
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+
+	if (user_data)
+		table = user_data->object_table;
 
 	member = dbus_message_get_member(msg);
 	if (!member)
@@ -811,7 +814,7 @@ DBusHandlerResult object_dispatch(DBusConnection *cnx,
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 	}
 
-	ret = fcn(cnx, msg);
+	ret = fcn(cnx, msg, user_data->user_data);
 	if (ret < 0)
 		LOG(LOG_WARNING, "Failed to execute handler for member %s "
 			"of object %s\n", member, dbus_message_get_path(msg));
@@ -825,11 +828,11 @@ static DBusObjectPathVTable vtable = {
 };
 
 int cdbus_register_object(DBusConnection * cnx, const char * path,
-			struct cdbus_interface_entry_t * object_table)
+			struct cdbus_user_data_t * user_data)
 {
 	int ret;
 	ret = dbus_connection_register_object_path(cnx, path, &vtable,
-						object_table);
+						user_data);
 	if (ret == FALSE)
 		return -1;
 

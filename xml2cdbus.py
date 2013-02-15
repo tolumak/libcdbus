@@ -406,7 +406,7 @@ class DBusMethod:
     def CFunctionPointer(self):
         string = "int (*" + self.name + ")"
         attributes = [x.CVarProto() for x in self.attributes]
-        string += "(DBusConnection *cnx, DBusMessage *msg"
+        string += "(DBusConnection *cnx, DBusMessage *msg, void *data"
         if attributes:
             string += ", "
         string += ', '.join(attributes) + ");"
@@ -415,7 +415,7 @@ class DBusMethod:
     def CFreeFunctionPointer(self):
         string = "void (*" + self.name + "_free)"
         attributes = [x.CVarProto() for x in self.attributes]
-        string += "(DBusConnection *cnx, DBusMessage *msg"
+        string += "(DBusConnection *cnx, DBusMessage *msg, void *data"
         if attributes:
             string += ", "
         string += ', '.join(attributes) + ");"
@@ -424,7 +424,7 @@ class DBusMethod:
     def CallCFunctionWithRet(self):
         string = "ret = -1 ; if (" + self.interface.COps() + '.' + self.name + ") ret = " 
         string += self.interface.COps() + '.' + self.name
-        string += "(cnx, msg"
+        string += "(cnx, msg, data"
         if self.attributes:
             string += ", " 
         string += ', '.join(x.CVar() for x in self.attributes) + ")"
@@ -433,7 +433,7 @@ class DBusMethod:
     def CallCFreeFunction(self):
         string = "if (" + self.interface.COps() + '.' + self.name + "_free) " 
         string += self.interface.COps() + '.' + self.name + "_free";
-        string += "(cnx, msg"
+        string += "(cnx, msg, data"
         if self.attributes:
             string += ", " 
         string += ', '.join(x.CVar() for x in self.attributes) + ")"
@@ -447,13 +447,13 @@ class DBusMethod:
     def CProxyPrototype(self):
         string = "int "
         string += self.CProxyName()
-        string += "(DBusConnection *cnx, DBusMessage *msg);\n"
+        string += "(DBusConnection *cnx, DBusMessage *msg, void *data);\n"
         return string
     
     def CProxy(self):
         string = "int "
         string += self.CName() + "_proxy"
-        string += "(DBusConnection *cnx, DBusMessage *msg)\n"
+        string += "(DBusConnection *cnx, DBusMessage *msg, void *data)\n"
         string += "{\n"
         string += "\tint ret;\n"
         string += "\tDBusMessage * reply;\n"
@@ -545,7 +545,7 @@ class DBusSignal:
         string = "int " 
         string += self.CName()
         attributes = [x.CVarProto() for x in self.attributes]
-        string += "(DBusConnection *cnx"
+        string += "(DBusConnection *cnx, const char * object_path"
         if attributes:
             string += ", " 
         string += ', '.join(attributes) + ");\n"
@@ -554,7 +554,7 @@ class DBusSignal:
     def CFunction(self):
         string = "int "
         string += self.CName()
-        string += "(DBusConnection *cnx"
+        string += "(DBusConnection *cnx, const char * object_path"
         attributes = [x.CVarProto() for x in self.attributes]
         if attributes:
             string += ", "
@@ -565,7 +565,7 @@ class DBusSignal:
         string += "\tDBusMessageIter iter;\n"
         string += "\n"
 
-        string += "\tmsg = dbus_message_new_signal(\"" + self.object.name + "\", \"" + self.interface.name + "\", \"" + self.name + "\");\n"
+        string += "\tmsg = dbus_message_new_signal((object_path ? object_path :\"" + self.object.name + "\"), \"" + self.interface.name + "\", \"" + self.name + "\");\n"
         string += "\tif (!msg) {\n"
         string += "\t\treturn -1;\n"
         string += "\t}\n"

@@ -24,15 +24,15 @@ int cdbus_next_timeout_event();
 int cdbus_timeout_handle();
 
 /* Objects management */
-struct cdbus_interface_entry_t;
+struct cdbus_user_data_t;
 int cdbus_register_object(DBusConnection * cnx, const char * path,
-			struct cdbus_interface_entry_t * table);
+			struct cdbus_user_data_t * user_data);
 int cdbus_unregister_object(DBusConnection * cnx, const char * path);
 
 
 /* Private declarations */
 
-typedef int (*cdbus_proxy_fcn_t)(DBusConnection *, DBusMessage*);
+typedef int (*cdbus_proxy_fcn_t)(DBusConnection *, DBusMessage*, void *);
 
 #define CDBUS_DIRECTION_IN  0
 #define CDBUS_DIRECTION_OUT 1
@@ -55,6 +55,12 @@ struct cdbus_interface_entry_t
 {
 	char *itf_name;
 	struct cdbus_message_entry_t *itf_table;
+};
+
+struct cdbus_user_data_t
+{
+	struct cdbus_interface_entry_t * object_table;
+	void * user_data;
 };
 
 #endif
