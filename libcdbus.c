@@ -708,11 +708,15 @@ int generate_interface_xml(struct extensible_string_t * str,
 }
 
 
-int generate_object_xml(struct extensible_string_t * str,
+int generate_object_xml(DBusConnection * cnx,
+			DBusMessage * msg,
+			struct extensible_string_t * str,
 			struct cdbus_interface_entry_t * table)
 {
 	int ret;
+
 	struct cdbus_interface_entry_t *itf = table;
+	char ** strarr, **curr;
 	ret = extstr_append_sprintf(str, "%s\n",
 				DBUS_INTROSPECT_1_0_XML_DOCTYPE_DECL_NODE);
 	if (ret < 0)
@@ -729,7 +733,18 @@ int generate_object_xml(struct extensible_string_t * str,
 		itf++;
 	}
 
+	if (dbus_connection_list_registered(cnx, dbus_message_get_path(msg), &strarr)) {
+		for (curr = strarr ; *curr ; curr++) {
+			ret = extstr_append_sprintf(str, "<node name=\"%s\"/>", *curr);
+			if (ret < 0)
+				return -1;
+		}
+		dbus_free_string_array(strarr);
+	}
+
+
 	ret = extstr_append_sprintf(str, "</node>");
+
 	if (ret < 0)
 		return -1;
 
@@ -748,7 +763,7 @@ int object_introspect(DBusConnection *cnx,
 	if (extstr_init(&str) < 0)
 		return -1;
 
-	ret = generate_object_xml(&str, table);
+	ret = generate_object_xml(cnx, msg, &str, table);
 	if (ret < 0)
 		goto free;
 
