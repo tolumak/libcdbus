@@ -725,7 +725,7 @@ class DBusObject:
         string += "#include <stdlib.h>\n"
         string += "#include \"" + self.CHeaderFileName() + "\"\n"
         string += "\n"
-        string += "static char * null_string = \"\";\n";
+        string += "static char * null_string __attribute__((unused)) = \"\";\n";
         string += "\n"
         for itf in self.interfaces.values():
             for msg in itf.methods.values():
