@@ -84,13 +84,9 @@ void rem_watch(DBusWatch *dbwatch, void *data)
 	LOG(LOG_DEBUG, "rem watch\n");
 
 	list_lock(&watch_list);
-	item = __list_get_first(&watch_list);
-	while(item) {
-		watch = container_of(item, struct watch_t, litem);
+	__for_each_list_item(&watch_list, item, litem, watch) {
 		if (watch->dbwatch == dbwatch)
 			break;
-
-		item = __list_get_next(item);
 	}
 	list_unlock(&watch_list);
 
@@ -109,12 +105,9 @@ int timeout_enable(struct timeout_t *timeout)
 	timeout->value = timeout->interval;
 
 	list_lock(&timeout_ordered_list);
-	item = __list_get_first(&timeout_ordered_list);
-	while (item) {
-		ordered_timeout = container_of(item, struct timeout_t, ordered);
+	__for_each_list_item(&timeout_ordered_list, item, ordered, ordered_timeout) {
 		if (ordered_timeout->value > timeout->value)
 			break;
-		item = __list_get_next(item);
 	}
 	if (item)
 		__list_insert_before(&timeout->ordered, item);
@@ -348,10 +341,7 @@ int cdbus_build_pollfds(struct pollfd ** fds, int *nfds, int reserve_slots)
 
 	list_lock(&watch_list);
 
-	item = __list_get_first(&watch_list);
-	while (item) {
-		watch = container_of(item, struct watch_t, litem);
-
+	__for_each_list_item(&watch_list, item, litem, watch) {
 		if (dbus_watch_get_enabled(watch->dbwatch) == TRUE) {
 			fd = dbus_watch_get_unix_fd(watch->dbwatch);
 			flags = dbus_watch_get_flags(watch->dbwatch);
@@ -369,7 +359,6 @@ int cdbus_build_pollfds(struct pollfd ** fds, int *nfds, int reserve_slots)
 				curr++;
 			}
 		}
-		item = __list_get_next(item);
 	}
 
 	list_unlock(&watch_list);
@@ -468,10 +457,7 @@ int cdbus_timeout_handle()
 		ms = 0;
 
 	list_lock(&timeout_ordered_list);
-	item = __list_get_first(&timeout_ordered_list);
-	while (item) {
-		timeout = container_of(item, struct timeout_t, ordered);
-		item = __list_get_next(item);
+	__for_each_list_item(&timeout_ordered_list, item, ordered, timeout) {
 
 		timeout->value -= ms;
 		if (timeout->value <= 0) {
