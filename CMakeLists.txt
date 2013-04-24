@@ -1,32 +1,39 @@
 cmake_minimum_required(VERSION 2.6)
 project(libcdbus)
 
-include(../common/defaults.cmake)
-include(../common/version.cmake)
-include(../common/log.cmake)
-include(../common/dbus.cmake)
+include($ENV{SISE_ENV_APPS_ROOT}/common/defaults.cmake)
+include($ENV{SISE_ENV_APPS_ROOT}/common/version.cmake)
+include($ENV{SISE_ENV_APPS_ROOT}/common/log.cmake)
+include($ENV{SISE_ENV_APPS_ROOT}/common/dbus.cmake)
 
 # Options
 set(BUILD_TEST_APP NO CACHE BOOL "Build test app")
 
 configure_file (
   "${PROJECT_SOURCE_DIR}/../common/config.h.in"
-  "${PROJECT_BINARY_DIR}/config.h"
+  "${PROJECT_BINARY_DIR}/common-config.h"
 )
+
+# Libutils
+set(LIBUTILS_PTHREAD_LOCK ON FORCE)
+add_subdirectory($ENV{SISE_ENV_APPS_ROOT}/libutils libutils)
+include_directories(${libutils_SOURCE_DIR})
+include_directories(${libutils_BINARY_DIR})
+
 
 include_directories(${PROJECT_BINARY_DIR})
 include_directories(${PROJECT_SOURCE_DIR})
-include_directories(${PROJECT_SOURCE_DIR}/../common)
+include_directories($ENV{SISE_ENV_APPS_ROOT}/common)
 include_directories(${CMAKE_SISE_ENV_SYSROOT}/usr/include/dbus-1.0/)
 include_directories(${CMAKE_SISE_ENV_SYSROOT}/usr/lib/dbus-1.0/include)
 
-set(SRCS libcdbus.c ../common/list.c)
+set(SRCS libcdbus.c)
 
 version_file_c(SRCS)
 
 add_library(cdbus SHARED ${SRCS})
 version_add_dependencies(cdbus)
-target_link_libraries(cdbus dbus-1)
+target_link_libraries(cdbus dbus-1 utils)
 install(TARGETS cdbus DESTINATION usr/lib)
 
 if (BUILD_TEST_APP)
