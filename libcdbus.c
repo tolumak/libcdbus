@@ -15,8 +15,8 @@
 #include "libcdbus.h"
 #include "log.h"
 #include "libcdbus-version.h"
+#include "macro.h"
 
-#define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 #define EXTSTR_BUFF_SIZE 16
 #define EXTSTR_BUFFER(s) ((s)->buffer + (s)->size)
 #define EXTSTR_REM_SIZE(s) ((s)->buf_size - (s)->size)
