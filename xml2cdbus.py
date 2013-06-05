@@ -274,6 +274,7 @@ class DBusSignature:
                 param = "((*" + varname + ")" + "[" + str(member) + "])"
         strings.append("if (dbus_message_iter_get_arg_type(&" + iterator + ") == " + self.DBusType() + ") {");
         if self.IsPrimitive():
+            strings.append("#if (DBUS_MAJOR_VERSION >= 1) && (DBUS_MINOR_VERSION >= 7)")
             strings.append("\tDBusBasicValue val;")
             strings.append("\tdbus_message_iter_get_basic(&" + iterator + ", &val);")
             if self.DBusType() == "DBUS_TYPE_BYTE":
@@ -297,7 +298,10 @@ class DBusSignature:
             elif self.DBusType() == "DBUS_TYPE_STRING":
                 strings.append("\t" + param + " = val.str;")
             elif self.DBusType() == "DBUS_TYPE_UNIX_FD":
-                    strings.append("\t" + param + " = val.fd;")
+                strings.append("\t" + param + " = val.fd;")
+            strings.append("#else")
+            strings.append("\tdbus_message_iter_get_basic(&" + iterator + ", &" + param +");")
+            strings.append("#endif")
         if self.IsArray():
             strings.append("\tcdbus_unpack_" + varname + "_array(&" + iterator + ", &" + param + ", &" + param + "_len);")
         if self.IsStruct():
@@ -328,7 +332,7 @@ class DBusSignature:
         string += "\tDBusMessageIter sub_iter;\n"
         string += "\tdbus_message_iter_recurse(iter, &sub_iter);\n"
         for x in self.subs:
-            string += "\t" + ";\n\t".join(y for y in x.CUnpack(varname, str(self.subs.index(x)), "sub_iter")) + ";\n"
+            string += "\t" + "\n\t".join(y for y in x.CUnpack(varname, str(self.subs.index(x)), "sub_iter")) + ";\n"
         string += "\treturn 0;\n"
         string += "}\n"
         return string
