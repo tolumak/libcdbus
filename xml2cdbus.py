@@ -274,7 +274,30 @@ class DBusSignature:
                 param = "((*" + varname + ")" + "[" + str(member) + "])"
         strings.append("if (dbus_message_iter_get_arg_type(&" + iterator + ") == " + self.DBusType() + ") {");
         if self.IsPrimitive():
-            strings.append("\tdbus_message_iter_get_basic(&" + iterator + ", &" + param + ");")
+            strings.append("\tDBusBasicValue val;")
+            strings.append("\tdbus_message_iter_get_basic(&" + iterator + ", &val);")
+            if self.DBusType() == "DBUS_TYPE_BYTE":
+                strings.append("\t" + param + " = val.byt;")
+            elif self.DBusType() == "DBUS_TYPE_BOOLEAN":
+                strings.append("\t" + param + " = val.bool_val;")
+            elif self.DBusType() == "DBUS_TYPE_INT16":
+                strings.append("\t" + param + " = val.i16;")
+            elif self.DBusType() == "DBUS_TYPE_UINT16":
+                strings.append("\t" + param + " = val.u16;")
+            elif self.DBusType() == "DBUS_TYPE_INT32":
+                strings.append("\t" + param + " = val.i32;")
+            elif self.DBusType() == "DBUS_TYPE_UINT32":
+                strings.append("\t" + param + " = val.u32;")
+            elif self.DBusType() == "DBUS_TYPE_INT64":
+                strings.append("\t" + param + " = val.i64;")
+            elif self.DBusType() == "DBUS_TYPE_UINT64":
+                strings.append("\t" + param + " = val.u64;")
+            elif self.DBusType() == "DBUS_TYPE_DOUBLE":
+                strings.append("\t" + param + " = val.dbl;")
+            elif self.DBusType() == "DBUS_TYPE_STRING":
+                strings.append("\t" + param + " = val.str;")
+            elif self.DBusType() == "DBUS_TYPE_UNIX_FD":
+                    strings.append("\t" + param + " = val.fd;")
         if self.IsArray():
             strings.append("\tcdbus_unpack_" + varname + "_array(&" + iterator + ", &" + param + ", &" + param + "_len);")
         if self.IsStruct():
