@@ -274,7 +274,7 @@ class DBusSignature:
                 param = "((*" + varname + ")" + "[" + str(member) + "])"
         strings.append("if (dbus_message_iter_get_arg_type(&" + iterator + ") == " + self.DBusType() + ") {");
         if self.IsPrimitive():
-            strings.append("#if (DBUS_MAJOR_VERSION >= 1) && (DBUS_MINOR_VERSION >= 7)")
+            strings.append("#if (DBUS_MAJOR_VERSION >= 1) && (DBUS_MINOR_VERSION >= 6)")
             strings.append("\tDBusBasicValue val;")
             strings.append("\tdbus_message_iter_get_basic(&" + iterator + ", &val);")
             if self.DBusType() == "DBUS_TYPE_BYTE":
