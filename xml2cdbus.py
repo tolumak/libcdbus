@@ -127,7 +127,7 @@ class DBusSignature:
         elif self.signature == "o": return "char *"
         elif self.signature == "g": return "char *"
         elif self.signature == "h": return "int"
-        elif self.signature == "v": raise DBusSignatureException
+        elif self.signature == "v": return "void *"
         if self.IsArray():     return self.CArrayType(varname)
         if self.IsStruct():     return self.CContainerType(varname)
 
@@ -144,6 +144,7 @@ class DBusSignature:
             add = ""
         if self.IsArray():     return self.CArrayVarProto(direction, varname)
         elif self.IsContainer(): return self.CContainerVarProto(direction, varname)
+        elif self.signature == "v" : return self.CVariantVarProto(direction, varname)
         else:
             return self.CType(varname) + add + " " + varname
 
@@ -157,6 +158,13 @@ class DBusSignature:
     def CContainerVarProto(self, direction, varname):
         return self.CType(varname) + " *" + " " + varname 
 
+    def CVariantVarProto(self, direction, varname):
+        if direction != "in":
+            add = "*"
+        else:
+            add = ""
+        return self.CType(varname) + add + " " + varname + ", int " + add +  varname + "_dbus_type"
+
     def CVar(self, direction, varname):
         if self.IsContainer():
             return "&" + varname
@@ -169,13 +177,21 @@ class DBusSignature:
                 string += ", " + varname + "_len"
             else:
                 string += ", &" + varname + "_len"
+        if self.signature == "v":
+            if direction == "in":
+                string += ", " + varname + "_dbus_type"
+            else:
+                string += ", &" + varname + "_dbus_type"
         return string
 
     def CDeclareVar(self, direction, varname):
+        
         if self.IsArray():
             return self.CType(varname) + " " + varname + " = NULL; int" + " " + varname + "_len = 0"
         elif self.IsStruct():
             return self.CType(varname) + " " + varname + " = { 0 }"
+        elif self.signature == "v":
+            return self.CType(varname) + " " + varname + " = NULL; int" + " " + varname + "_dbus_type = DBUS_TYPE_INVALID"
         else:
             return self.CType(varname) + " " + varname + " = 0"
 
@@ -191,7 +207,9 @@ class DBusSignature:
                 subfree = x.CFree(varname, str(self.subs.index(x)))
                 for y in subfree:
                     strings.append(y)
-            if self.IsArray():
+            if self.IsArray() or self.signature == "v":
+                strings.append("if (" + varname + "); free(" + varname + ")");
+        elif self.signature == "v":
                 strings.append("if (" + varname + "); free(" + varname + ")");
         return strings;
 
@@ -207,6 +225,8 @@ class DBusSignature:
         if self.IsPrimitive():
             if self.signature == "s":
                 strings.append("dbus_message_iter_append_basic(&" + iterator + ", " + self.DBusType() + ", " + param + " ? &" + param + " : &null_string)")
+            elif self.signature == "v":
+                strings.append("cdbus_pack_" + varname + "_variant(&" + iterator + ", " + param + ", " + param + "_dbus_type)")
             else:
                 strings.append("dbus_message_iter_append_basic(&" + iterator + ", " + self.DBusType() + ", &" + param + ")")
         if self.IsArray():
@@ -228,11 +248,29 @@ class DBusSignature:
             for func in functions:
                     strings.append(func)
 
+        if self.signature == "v":
+            strings.append(self.CPackVariantFunction(varname))
         if self.IsStruct():
             strings.append(self.CPackStructFunction(varname))
         if self.IsArray():
             strings.append(self.CPackArrayFunction(varname))
         return strings
+
+    def CPackVariantFunction(self, varname):
+        string = "int cdbus_pack_" + varname + "_variant(DBusMessageIter *iter, " + self.CVarProto("in", varname) + ")\n"
+        string += "{\n"
+        string += "\tDBusMessageIter sub_iter;\n"
+        string += "\tchar signature[2];\n"
+        string += "\tif (!dbus_type_is_basic(" + varname + "_dbus_type)) return -1;\n"
+        string += "\tsignature[0] = " + varname + "_dbus_type;\n"
+        string += "\tsignature[1] = 0;\n"
+        string += "\tdbus_message_iter_open_container(iter, " + self.DBusType() + ", signature, &sub_iter);\n"
+        string += "\tdbus_message_iter_append_basic(&sub_iter, " + varname + "_dbus_type, &" + varname +");\n"
+        string += "\tdbus_message_iter_close_container(iter, &sub_iter);\n"
+        string += "\treturn 0;\n"
+        string += "}\n"
+        return string
+
 
     def CPackStructFunction(self, varname):
         string = "int cdbus_pack_" + varname + "_struct(DBusMessageIter *iter, " + self.CVarProto("in", varname) + ")\n"
@@ -273,7 +311,10 @@ class DBusSignature:
             else:
                 param = "((*" + varname + ")" + "[" + str(member) + "])"
         strings.append("if (dbus_message_iter_get_arg_type(&" + iterator + ") == " + self.DBusType() + ") {");
-        if self.IsPrimitive():
+        if self.signature == "v":
+            strings.append("\tcdbus_unpack_" + varname + "_variant(&" + iterator + ", &" + param + ", &" + param + "_dbus_type);")
+
+        elif self.IsPrimitive():
             strings.append("#if (DBUS_MAJOR_VERSION >= 1) && (DBUS_MINOR_VERSION >= 6)")
             strings.append("\tDBusBasicValue val;")
             strings.append("\tdbus_message_iter_get_basic(&" + iterator + ", &val);")
@@ -320,11 +361,74 @@ class DBusSignature:
             for func in functions:
                     strings.append(func)
 
+        if self.signature == "v":
+            strings.append(self.CUnpackVariantFunction(varname))
         if self.IsStruct():
             strings.append(self.CUnpackStructFunction(varname))
         if self.IsArray():
             strings.append(self.CUnpackArrayFunction(varname))
         return strings
+
+    def CUnpackVariantFunction(self, varname):
+        string = "int cdbus_unpack_" + varname + "_variant(DBusMessageIter *iter, " + self.CVarProto("out", varname) + ")\n"
+        string += "{\n"
+        string += "\tDBusMessageIter sub_iter;\n"
+        string += "\tdbus_message_iter_recurse(iter, &sub_iter);\n"
+        string += "\t*" + varname + "_dbus_type = dbus_message_iter_get_arg_type(&sub_iter);\n"
+        string += "\tif (!dbus_type_is_basic(*" + varname + "_dbus_type)) return -1;\n"
+        string += "\tDBusBasicValue val;"
+        string += "\tdbus_message_iter_get_basic(&sub_iter, &val);\n"
+        string += "\tswitch(*" + varname + "_dbus_type) {\n"
+        string += "\tcase DBUS_TYPE_BYTE:\n"
+        string += "\t\t*" + varname + " = malloc(sizeof(char));\n"
+        string += "\t\t**(char **)" + varname + " = val.byt;\n"
+        string += "\t\tbreak;\n"
+        string += "\tcase DBUS_TYPE_BOOLEAN:\n"
+        string += "\t\t*" + varname + " = malloc(sizeof(int));\n"
+        string += "\t\t**(int **)" + varname + " = val.bool_val;\n"
+        string += "\t\tbreak;\n"
+        string += "\tcase DBUS_TYPE_INT16:\n"
+        string += "\t\t*" + varname + " = malloc(sizeof(int16_t));\n"
+        string += "\t\t**(int16_t**)" + varname + " = val.i16;\n"
+        string += "\t\tbreak;\n"
+        string += "\tcase DBUS_TYPE_UINT16:\n"
+        string += "\t\t*" + varname + " = malloc(sizeof(uint16_t));\n"
+        string += "\t\t**(uint16_t **)" + varname + " = val.u16;\n"
+        string += "\t\tbreak;\n"
+        string += "\tcase DBUS_TYPE_INT32:\n"
+        string += "\t\t*" + varname + " = malloc(sizeof(int32_t));\n"
+        string += "\t\t**(int32_t **)" + varname + " = val.i32;\n"
+        string += "\t\tbreak;\n"
+        string += "\tcase DBUS_TYPE_UINT32:\n"
+        string += "\t\t*" + varname + " = malloc(sizeof(uint32_t));\n"
+        string += "\t\t**(uint32_t **)" + varname + " = val.u32;\n"
+        string += "\t\tbreak;\n"
+        string += "\tcase DBUS_TYPE_INT64:\n"
+        string += "\t\t*" + varname + " = malloc(sizeof(int64_t));\n"
+        string += "\t\t**(int64_t **)" + varname + " = val.i64;\n"
+        string += "\t\tbreak;\n"
+        string += "\tcase DBUS_TYPE_UINT64:\n"
+        string += "\t\t*" + varname + " = malloc(sizeof(uint64_t));\n"
+        string += "\t\t**(uint64_t **)" + varname + " = val.u64;\n"
+        string += "\t\tbreak;\n"
+        string += "\tcase DBUS_TYPE_DOUBLE:\n"
+        string += "\t\t*" + varname + " = malloc(sizeof(double));\n"
+        string += "\t\t**(double **)" + varname + " = val.dbl;\n"
+        string += "\t\tbreak;\n"
+        string += "\tcase DBUS_TYPE_STRING:\n"
+        string += "\t\t*" + varname + " = malloc(strlen(val.str)+1);\n"
+        string += "\t\tstrcpy(*(char **)" + varname + ", val.str);\n"
+        string += "\t\tbreak;\n"
+        string += "\tcase DBUS_TYPE_UNIX_FD:\n"
+        string += "\t\t*" + varname + " = malloc(sizeof(int));\n"
+        string += "\t\t**(int **)" + varname + " = val.fd;\n"
+        string += "\t\tbreak;\n"
+        string += "\tdefault:\n"
+        string += "\t\treturn -1;\n"
+        string += "\t}\n"
+        string += "\treturn 0;\n"
+        string += "}\n"
+        return string
 
     def CUnpackStructFunction(self, varname):
         string = "int cdbus_unpack_" + varname + "_struct(DBusMessageIter *iter, " + self.CVarProto("out", varname) + ")\n"
@@ -750,6 +854,8 @@ class DBusObject:
         string = "/* Generated with xml2cdbus.py, do not touch */\n"
         string += "\n"
         string += "#include <stdlib.h>\n"
+        string += "#include <stdint.h>\n"
+        string += "#include <string.h>\n"
         string += "#include \"" + self.CHeaderFileName() + "\"\n"
         string += "\n"
         string += "static char * null_string __attribute__((unused)) = \"\";\n";
