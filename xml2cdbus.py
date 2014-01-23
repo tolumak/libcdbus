@@ -213,7 +213,7 @@ class DBusSignature:
                 strings.append("if (" + varname + "); free(" + varname + ")");
         return strings;
 
-    def CPack(self, varname, member = "", iterator="iter", in_array=False):
+    def CPack(self, direction, varname, member = "", iterator="iter", in_array=False):
         strings = []
         param = varname
         if member != "":
@@ -282,7 +282,7 @@ class DBusSignature:
         string += "\tDBusMessageIter sub_iter;\n"
         string += "\tdbus_message_iter_open_container(iter, " + self.DBusType() + ", NULL, &sub_iter);\n"
         for x in self.subs:
-            string += "\t" + ";\n\t".join(y for y in x.CPack(varname, str(self.subs.index(x)), "sub_iter")) + ";\n"
+            string += "\t" + ";\n\t".join(y for y in x.CPack("in", varname, str(self.subs.index(x)), "sub_iter")) + ";\n"
         string += "\tdbus_message_iter_close_container(iter, &sub_iter);\n"
         string += "\treturn 0;\n"
         string += "}\n"
@@ -297,7 +297,7 @@ class DBusSignature:
         string += "\tdbus_message_iter_open_container(iter, " + self.DBusType() + ", \"" + self.SubSignature() + "\", &sub_iter);\n"
         string += "\tfor(__i = 0 ; __i < " + varname + "_len ; __i++) {\n"
         for x in self.subs:
-            string += "\t\t" + ";\n\t\t".join(y for y in x.CPack(varname, "__i", "sub_iter", True)) + ";\n"
+            string += "\t\t" + ";\n\t\t".join(y for y in x.CPack("in", varname, "__i", "sub_iter", True)) + ";\n"
         string += "\t}\n"
         string += "\tdbus_message_iter_close_container(iter, &sub_iter);\n"
         string += "\treturn 0;\n"
@@ -305,52 +305,55 @@ class DBusSignature:
         return string
 
 
-    def CUnpack(self, varname, member = "", iterator="iter", in_array=False):
+    def CUnpack(self, direction, varname, member = "", iterator="iter", in_array=False):
         strings = []
-        param = varname
+        if direction == "out":
+            param = varname
+        else:
+            param = '&' + varname
         if member != "":
             if not in_array:
                 varname += "_member_" + str(member)
-                param += "->member_" + str(member)
+                param = "&" + param + "->member_" + str(member)
             else:
-                param = "((*" + varname + ")" + "[" + str(member) + "])"
+                param = "&((*" + param + ")" + "[" + str(member) + "])"
         strings.append("if (dbus_message_iter_get_arg_type(&" + iterator + ") == " + self.DBusType() + ") {");
         if self.signature == "v":
-            strings.append("\tcdbus_unpack_" + varname + "_variant(&" + iterator + ", &" + param + ", &" + param + "_dbus_type);")
+            strings.append("\tcdbus_unpack_" + varname + "_variant(&" + iterator + ", " + param + ", " + param + "_dbus_type);")
 
         elif self.IsPrimitive():
             strings.append("#if (DBUS_MAJOR_VERSION >= 1) && (DBUS_MINOR_VERSION >= 6)")
             strings.append("\tDBusBasicValue val;")
             strings.append("\tdbus_message_iter_get_basic(&" + iterator + ", &val);")
             if self.DBusType() == "DBUS_TYPE_BYTE":
-                strings.append("\t" + param + " = val.byt;")
+                strings.append("\t*" + param + " = val.byt;")
             elif self.DBusType() == "DBUS_TYPE_BOOLEAN":
-                strings.append("\t" + param + " = val.bool_val;")
+                strings.append("\t*" + param + " = val.bool_val;")
             elif self.DBusType() == "DBUS_TYPE_INT16":
-                strings.append("\t" + param + " = val.i16;")
+                strings.append("\t*" + param + " = val.i16;")
             elif self.DBusType() == "DBUS_TYPE_UINT16":
-                strings.append("\t" + param + " = val.u16;")
+                strings.append("\t*" + param + " = val.u16;")
             elif self.DBusType() == "DBUS_TYPE_INT32":
-                strings.append("\t" + param + " = val.i32;")
+                strings.append("\t*" + param + " = val.i32;")
             elif self.DBusType() == "DBUS_TYPE_UINT32":
-                strings.append("\t" + param + " = val.u32;")
+                strings.append("\t*" + param + " = val.u32;")
             elif self.DBusType() == "DBUS_TYPE_INT64":
-                strings.append("\t" + param + " = val.i64;")
+                strings.append("\t*" + param + " = val.i64;")
             elif self.DBusType() == "DBUS_TYPE_UINT64":
-                strings.append("\t" + param + " = val.u64;")
+                strings.append("\t*" + param + " = val.u64;")
             elif self.DBusType() == "DBUS_TYPE_DOUBLE":
-                strings.append("\t" + param + " = val.dbl;")
+                strings.append("\t*" + param + " = val.dbl;")
             elif self.DBusType() == "DBUS_TYPE_STRING":
-                strings.append("\t" + param + " = val.str;")
+                strings.append("\t*" + param + " = val.str;")
             elif self.DBusType() == "DBUS_TYPE_UNIX_FD":
-                strings.append("\t" + param + " = val.fd;")
+                strings.append("\t*" + param + " = val.fd;")
             strings.append("#else")
-            strings.append("\tdbus_message_iter_get_basic(&" + iterator + ", &" + param +");")
+            strings.append("\tdbus_message_iter_get_basic(&" + iterator + ", " + param +");")
             strings.append("#endif")
         if self.IsArray():
-            strings.append("\tcdbus_unpack_" + varname + "_array(&" + iterator + ", &" + param + ", &" + param + "_len);")
+            strings.append("\tcdbus_unpack_" + varname + "_array(&" + iterator + ", " + param + ", " + param + "_len);")
         if self.IsStruct():
-            strings.append("\tcdbus_unpack_" + varname + "_struct(&" + iterator + ", &" + param + ");")
+            strings.append("\tcdbus_unpack_" + varname + "_struct(&" + iterator + ", " + param + ");")
         strings.append("}");
         strings.append("dbus_message_iter_next(&" + iterator + ");")
         return strings
@@ -377,10 +380,13 @@ class DBusSignature:
         string = "int cdbus_unpack_" + varname + "_variant(DBusMessageIter *iter, " + self.CVarProto("out", varname) + ")\n"
         string += "{\n"
         string += "\tDBusMessageIter sub_iter;\n"
+        string += "#if (DBUS_MAJOR_VERSION >= 1) && (DBUS_MINOR_VERSION >= 6)\n"
+        string += "\tDBusBasicValue val;\n"
+        string += "#endif\n"
         string += "\tdbus_message_iter_recurse(iter, &sub_iter);\n"
         string += "\t*" + varname + "_dbus_type = dbus_message_iter_get_arg_type(&sub_iter);\n"
         string += "\tif (!dbus_type_is_basic(*" + varname + "_dbus_type)) return -1;\n"
-        string += "\tDBusBasicValue val;"
+        string += "#if (DBUS_MAJOR_VERSION >= 1) && (DBUS_MINOR_VERSION >= 6)\n"
         string += "\tdbus_message_iter_get_basic(&sub_iter, &val);\n"
         string += "\tswitch(*" + varname + "_dbus_type) {\n"
         string += "\tcase DBUS_TYPE_BYTE:\n"
@@ -430,6 +436,9 @@ class DBusSignature:
         string += "\tdefault:\n"
         string += "\t\treturn -1;\n"
         string += "\t}\n"
+        string += "#else\n"
+        string += "\tdbus_message_iter_get_basic(&sub_iter, & " + varname + ");\n"
+        string += "#endif\n"
         string += "\treturn 0;\n"
         string += "}\n"
         return string
@@ -440,7 +449,7 @@ class DBusSignature:
         string += "\tDBusMessageIter sub_iter;\n"
         string += "\tdbus_message_iter_recurse(iter, &sub_iter);\n"
         for x in self.subs:
-            string += "\t" + "\n\t".join(y for y in x.CUnpack(varname, str(self.subs.index(x)), "sub_iter")) + ";\n"
+            string += "\t" + "\n\t".join(y for y in x.CUnpack("out", varname, str(self.subs.index(x)), "sub_iter")) + ";\n"
         string += "\treturn 0;\n"
         string += "}\n"
         return string
@@ -462,7 +471,7 @@ class DBusSignature:
         string += "\t\tint dont_stop;\n"
         string += "\t\tdont_stop = dbus_message_iter_has_next(&sub_iter);\n"
         for x in self.subs:
-            string += "\t\t" + "\n\t\t".join(y for y in x.CUnpack(varname, "(*" + varname + "_len)++", "sub_iter", True)) + "\n"
+            string += "\t\t" + "\n\t\t".join(y for y in x.CUnpack("out", varname, "(*" + varname + "_len)++", "sub_iter", True)) + "\n"
         string += "\t\tif (!dont_stop) break;\n"
         string += "\t}\n"
         string += "\treturn 0;\n"
@@ -524,19 +533,20 @@ class DBusAttribute:
         return self.type.CVar(self.direction, self.name)
 
     def CUnpack(self):
-        return self.type.CUnpack(self.name)
+        return self.type.CUnpack(self.direction, self.name)
 
     def CPack(self):
-        return self.type.CPack(self.name)
+        return self.type.CPack(self.direction, self.name)
 
     def CFree(self):
         return self.type.CFree(self.name)
 
 class DBusMethod:
-    def __init__(self, name, interface, attributes):
+    def __init__(self, name, interface, obj, attributes):
         self.name = name
         self.attributes = attributes
         self.interface = interface
+        self.object = obj
 
     def CFunctionPointer(self):
         string = "int (*" + self.name + ")"
@@ -557,8 +567,8 @@ class DBusMethod:
         return string;    
 
     def CallCFunctionWithRet(self):
-        string = "ret = -1 ; if (" + self.interface.COps() + '.' + self.name + ") ret = " 
-        string += self.interface.COps() + '.' + self.name
+        string = "ret = -1 ; if (" + self.interface.CMethodsOps() + '.' + self.name + ") ret = " 
+        string += self.interface.CMethodsOps() + '.' + self.name
         string += "(cnx, msg, data"
         if self.attributes:
             string += ", " 
@@ -566,8 +576,8 @@ class DBusMethod:
         return string
 
     def CallCFreeFunction(self):
-        string = "if (" + self.interface.COps() + '.' + self.name + "_free) " 
-        string += self.interface.COps() + '.' + self.name + "_free";
+        string = "if (" + self.interface.CMethodsOps() + '.' + self.name + "_free) " 
+        string += self.interface.CMethodsOps() + '.' + self.name + "_free";
         string += "(cnx, msg, data"
         if self.attributes:
             string += ", " 
@@ -646,6 +656,70 @@ class DBusMethod:
         string += "}\n"
         return string
 
+    def CPrototype(self):
+        string = "int " 
+        string += self.CName()
+        attributes = [x.CVarProto() for x in self.attributes]
+        string += "_call(DBusConnection *cnx, const char * dest, const char * object_path"
+        if attributes:
+            string += ", " 
+        string += ', '.join(attributes) + ");\n"
+        return string
+
+    def CFunction(self):
+        string = "int "
+        string += self.CName()
+        string += "_call(DBusConnection *cnx, const char * dest, const char * object_path"
+        attributes = [x.CVarProto() for x in self.attributes]
+        if attributes:
+            string += ", "
+        string += ', '.join(attributes)
+        string += ")\n"
+        string += "{\n"
+        string += "\tDBusMessage * msg;\n"
+        string += "\tDBusMessageIter iter;\n"
+        string += "\tDBusPendingCall * pending;\n"
+        string += "\n"
+
+        string += "\tmsg = dbus_message_new_method_call(dest, (object_path ? object_path :\"" + self.object.name + "\"), \"" + self.interface.name + "\", \"" + self.name + "\");\n"
+        string += "\tif (!msg) {\n"
+        string += "\t\treturn -1;\n"
+        string += "\t}\n"
+
+        # pack the variables and send the message
+        string += "\tdbus_message_iter_init_append(msg, &iter);\n"
+        for x in self.attributes:
+            if x.direction == "in":
+                string += "\t" + ";\n\t".join(y for y in x.CPack()) + ";\n"
+        string += "\n"
+
+        string += "\tdbus_connection_send_with_reply(cnx, msg, &pending, DBUS_TIMEOUT_USE_DEFAULT);\n"
+        string += "\tdbus_message_unref(msg);\n"
+        string += "\n"
+        string += "\tif (!pending) {\n"
+        string += "\t\treturn -1;\n"
+        string += "\t}\n"
+        string += "\n"
+        string += "\twhile (!dbus_pending_call_get_completed(pending));\n"
+        string += "\tmsg = dbus_pending_call_steal_reply(pending);\n"
+        string += "\tdbus_pending_call_unref(pending);\n"
+        string += "\n"
+        string += "\tif (dbus_message_get_error_name(msg)) {\n"
+        string += "\t\tdbus_message_unref(msg);\n"
+        string += "\t\treturn -1;\n"
+        string += "\t}\n"
+        string += "\n"
+        string += "\tdbus_message_iter_init(msg, &iter);\n"
+        for x in self.attributes:
+            if x.direction == "out":
+                string += "\t" + "\n\t".join(y for y in x.CUnpack()) + "\n"
+        string += "\n"
+        string += "\tdbus_message_unref(msg);\n"
+        string += "\n"        
+        string += "\treturn 0;\n"
+        string += "}\n"
+        return string
+
     def CName(self):
         return self.interface.CName() + '_' + self.name;
 
@@ -720,6 +794,77 @@ class DBusSignal:
         string += "}\n"
         return string
 
+    def CFunctionPointer(self):
+        string = "int (*" + self.name + ")"
+        attributes = [x.CVarProto() for x in self.attributes]
+        string += "(DBusConnection *cnx, DBusMessage *msg, void *data"
+        if attributes:
+            string += ", "
+        string += ', '.join(attributes) + ");"
+        return string;
+
+    def CallCFunctionWithRet(self):
+        string = "ret = -1 ; if (" + self.interface.CSignalsOps() + '.' + self.name + ") ret = " 
+        string += self.interface.CSignalsOps() + '.' + self.name
+        string += "(cnx, msg, data"
+        if self.attributes:
+            string += ", " 
+        string += ', '.join(x.CVar() for x in self.attributes) + ")"
+        return string
+
+    def CProxyName(self):
+        string = self.CName() + "_proxy"
+        return string
+
+    def CProxyPrototype(self):
+        string = "int "
+        string += self.CProxyName()
+        string += "(DBusConnection *cnx, DBusMessage *msg, void *data);\n"
+        return string
+    
+    def CProxy(self):
+        string = "int "
+        string += self.CName() + "_proxy"
+        string += "(DBusConnection *cnx, DBusMessage *msg, void *data)\n"
+        string += "{\n"
+        string += "\tint ret;\n"
+        string += "\tDBusMessage * reply;\n"
+        string += "\t" + ";\n\t".join(x.CDeclareVar() for x in self.attributes) + ";\n"
+
+        # Unpack the variables 
+        string += "\n\tDBusMessageIter iter;\n"
+        string += "\tdbus_message_iter_init(msg, &iter);\n"
+        for x in self.attributes:
+            if x.direction == "in":
+                string += "\t" + "\n\t".join(y for y in x.CUnpack()) + "\n"
+        string += "\n"
+
+        # Call the real functions
+        string += "\t" + self.CallCFunctionWithRet() + ";\n"
+        string += "\n"
+
+        string += "\tif (ret < 0) {\n"
+
+        # ret < 0 : Send a generic error message and exit
+        string += "\t\treply = dbus_message_new_error(msg, DBUS_ERROR_FAILED, \"method_call failed\");\n"
+        string += "\t\tif (!reply) {\n"
+        string += "\t\t\tret = -1;\n"
+        string += "\t\t\tgoto free;\n"
+        string += "\t\t}\n"
+
+        string += "\t}\n"
+        
+        # Free the allocated variables
+        string += "free:\n"
+        for x in self.attributes:
+            attrfree = x.CFree()
+            if len(attrfree) != 0:
+                string += "\t" + ";\n\t".join(y for y in attrfree) + ";\n" 
+        string += "\treturn ret;\n"
+        string += "}\n"
+        return string
+
+
     def CTableHeader(self):
         return "extern struct cdbus_arg_entry_t " + self.CTableName() + "[];\n"
 
@@ -752,25 +897,52 @@ class DBusInterface:
     def CTableHeader(self):
         return "extern struct cdbus_message_entry_t " + self.CTableName() + "[];\n"
 
-    def COps(self):
+    def CMethodsOps(self):
         return self.CName() + "_ops"
 
-    def COpsPrototype(self):
+    def CMethodsOpsPrototype(self):
         string = "extern struct "
-        string += self.COps() + " {\n";
+        string += self.CMethodsOps() + " {\n";
         for (name, method) in self.methods.items():
             string += "\t" + method.CFunctionPointer() + "\n"
             string += "\t" + method.CFreeFunctionPointer() + "\n"
-        string += "} "+ self.COps() + ";\n"
+        string += "} "+ self.CMethodsOps() + ";\n"
         return string
+
+    def CMethodsOpsDefaultValue(self):
+        string = "struct " + self.CMethodsOps() + " " + self.CMethodsOps() + ' __attribute__((weak)) = {\n'
+        for (name, method) in self.methods.items():
+            string += "\t." + method.name + " = NULL,\n"
+            string += "\t." + method.name + "_free = NULL,\n"
+        string += "};\n"
+        return string;
+
+
+    def CSignalsOps(self):
+        return self.CName() + "_signals_ops"
+
+    def CSignalsOpsPrototype(self):
+        string = "extern struct "
+        string += self.CSignalsOps() + " {\n";
+        for (name, method) in self.signals.items():
+            string += "\t" + method.CFunctionPointer() + "\n"
+        string += "} " + self.CSignalsOps() + ";\n"
+        return string
+
+    def CSignalsOpsDefaultValue(self):
+        string = "struct " + self.CSignalsOps() + " " + self.CSignalsOps() + ' __attribute__((weak)) = {\n'
+        for (name, signal) in self.signals.items():
+            string += "\t." + signal.name + " = NULL,\n"
+        string += "};\n"
+        return string;
 
     def CTable(self):
         string = "struct cdbus_message_entry_t " + self.CTableName() + "[] = {\n"
         for (name, method) in self.methods.items():
-            string += "\t{\"" + name + "\", " + method.CProxyName() + ", " + method.CTableName() + "},\n"
+            string += "\t{0, \"" + name + "\", " + method.CProxyName() + ", " + method.CTableName() + "},\n"
         for (name, signal) in self.signals.items():
-            string += "\t{\"" + name + "\", NULL, " + signal.CTableName() +"},\n"
-        string += "\t{NULL, NULL},\n"
+            string += "\t{1, \"" + name + "\", " + signal.CProxyName() + ", " + signal.CTableName() +"},\n"
+        string += "\t{0, NULL, NULL, NULL},\n"
         string += "};\n"
         return string
 
@@ -829,11 +1001,15 @@ class DBusObject:
         string += "/* Functions implemented by the library user */\n"
         string += "\n"
         for itf in self.interfaces.values():
-            string += itf.COpsPrototype()
+            string += itf.CMethodsOpsPrototype()
+            string += "\n";
+            string += itf.CSignalsOpsPrototype()
         string += "\n"
         string += "/* Public functions */\n"
         string += "\n"
         for itf in self.interfaces.values():
+            for msg in itf.methods.values():
+                string += msg.CPrototype()
             for msg in itf.signals.values():
                 string += msg.CPrototype()
         string += "\n"
@@ -841,6 +1017,8 @@ class DBusObject:
         string += "\n"
         for itf in self.interfaces.values():
             for msg in itf.methods.values():
+                string += msg.CProxyPrototype()
+            for msg in itf.signals.values():
                 string += msg.CProxyPrototype()
             string += "\n"
         for itf in self.interfaces.values():
@@ -863,6 +1041,11 @@ class DBusObject:
         string += "#include \"" + self.CHeaderFileName() + "\"\n"
         string += "\n"
         string += "static char * null_string __attribute__((unused)) = \"\";\n";
+        for itf in self.interfaces.values():
+            string += itf.CMethodsOpsDefaultValue()
+            string += "\n";
+            string += itf.CSignalsOpsDefaultValue()
+        string += "\n"
         string += "\n"
         for itf in self.interfaces.values():
             for msg in itf.methods.values():
@@ -876,21 +1059,23 @@ class DBusObject:
         for itf in self.interfaces.values():
             for msg in itf.methods.values():
                 for attr in msg.attributes:
-                    if attr.direction == "in":
                         for funcstring in attr.type.CUnpackFunctions(attr.name):
                             string += funcstring + "\n"
-                    if attr.direction == "out":
                         for funcstring in attr.type.CPackFunctions(attr.name):
                             string += funcstring + "\n"
             for msg in itf.signals.values():
                 for attr in msg.attributes:
+                    for funcstring in attr.type.CUnpackFunctions(attr.name):
+                        string += funcstring + "\n"
                     for funcstring in attr.type.CPackFunctions(attr.name):
                         string += funcstring + "\n"
 
         for itf in self.interfaces.values():
             for msg in itf.methods.values():
                 string += msg.CProxy() + "\n"
+                string += msg.CFunction() + "\n"
             for msg in itf.signals.values():
+                string += msg.CProxy() + "\n"
                 string += msg.CFunction() + "\n"
 
         return string
@@ -922,7 +1107,7 @@ def add_method():
     global current_method, current_args
     dbusinterface = objects[current_node].Interface(current_interface)
     attributes = args2attribute(dbusinterface.CName() + '_' + current_method, current_args)
-    method = DBusMethod(current_method, dbusinterface, attributes)
+    method = DBusMethod(current_method, dbusinterface, objects[current_node], attributes)
     dbusinterface.AddMethod(method)
 
 def add_signal():

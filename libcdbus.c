@@ -48,11 +48,21 @@ struct timeout_t {
 	void * cb_data;
 };
 
+struct signal_t {
+	struct list_item_t item;
+	DBusConnection * cnx;
+	char * sender;
+	char * object;
+	char * match_rule;
+	struct cdbus_user_data_t data;
+};
+
 static DECLARE_LIST_INIT(watch_list);
 static DECLARE_LIST_INIT(timeout_ordered_list);
+static DECLARE_LIST_INIT(signal_list);
 
 
-dbus_bool_t add_watch(DBusWatch *dbwatch, void *data)
+static dbus_bool_t add_watch(DBusWatch *dbwatch, void *data)
 {
 	struct watch_t *watch;
 	DBusConnection *cnx = (DBusConnection *)data;
@@ -76,7 +86,7 @@ err_free:
 	return FALSE;
 }
 
-void rem_watch(DBusWatch *dbwatch, void *data)
+static void rem_watch(DBusWatch *dbwatch, void *data)
 {
 	struct watch_t *watch;
 	struct list_item_t *item;
@@ -97,7 +107,7 @@ void rem_watch(DBusWatch *dbwatch, void *data)
 	free(watch);
 }
 
-int timeout_enable(struct timeout_t *timeout)
+static int timeout_enable(struct timeout_t *timeout)
 {
 	struct list_item_t *item;
 	struct timeout_t *ordered_timeout;
@@ -119,13 +129,13 @@ int timeout_enable(struct timeout_t *timeout)
 	return 0;
 }
 
-int timeout_disable(struct timeout_t *timeout)
+static int timeout_disable(struct timeout_t *timeout)
 {
 	list_rem_item(&timeout->ordered);
 	return 0;
 }
 
-void free_timeout(void *data)
+static void free_timeout(void *data)
 {
 	struct timeout_t *timeout = data;
 
@@ -135,7 +145,7 @@ void free_timeout(void *data)
 	free(timeout);
 }
 
-void timeout_toggled(DBusTimeout *dbtimeout, void *data)
+static void timeout_toggled(DBusTimeout *dbtimeout, void *data)
 {
 	struct timeout_t *timeout;
 
@@ -163,7 +173,7 @@ void timeout_toggled(DBusTimeout *dbtimeout, void *data)
 	}
 }
 
-dbus_bool_t add_timeout(DBusTimeout *dbtimeout, void *data)
+static dbus_bool_t add_timeout(DBusTimeout *dbtimeout, void *data)
 {
 	struct timeout_t *timeout;
 	DBusConnection *cnx = (DBusConnection *)data;
@@ -184,7 +194,7 @@ dbus_bool_t add_timeout(DBusTimeout *dbtimeout, void *data)
 	return TRUE;
 }
 
-void rem_timeout(DBusTimeout *dbtimeout, void *data)
+static void rem_timeout(DBusTimeout *dbtimeout, void *data)
 {
 	struct timeout_t *timeout;
 
@@ -199,7 +209,7 @@ void rem_timeout(DBusTimeout *dbtimeout, void *data)
 	}
 }
 
-void dispatch(struct timeout_t *timeout, void* data)
+static void dispatch(struct timeout_t *timeout, void* data)
 {
 	while (dbus_connection_dispatch(timeout->cnx) ==
 		DBUS_DISPATCH_DATA_REMAINS) {
@@ -207,7 +217,7 @@ void dispatch(struct timeout_t *timeout, void* data)
 	}
 }
 
-struct timeout_t* new_dispatch_timeout(DBusConnection *cnx)
+static struct timeout_t* new_dispatch_timeout(DBusConnection *cnx)
 {
 	struct timeout_t *timeout;
 
@@ -227,7 +237,7 @@ struct timeout_t* new_dispatch_timeout(DBusConnection *cnx)
 	return timeout;
 }
 
-void dispatch_status(DBusConnection *cnx, DBusDispatchStatus new_status,
+static void dispatch_status(DBusConnection *cnx, DBusDispatchStatus new_status,
 		void *data)
 {
 	struct timeout_t *timeout;
@@ -239,6 +249,114 @@ void dispatch_status(DBusConnection *cnx, DBusDispatchStatus new_status,
 	if (timeout)
 		timeout_enable(timeout);
 }
+
+static cdbus_proxy_fcn_t find_member(const char * member,
+			struct cdbus_message_entry_t * itf_table)
+{
+	struct cdbus_message_entry_t * msg_entry = itf_table;
+ 	while (msg_entry->msg_name) {
+		if (!strcmp(msg_entry->msg_name, member))
+			break;
+		msg_entry++;
+	}
+
+	if (!msg_entry->msg_name)
+		return NULL;
+	return msg_entry->msg_fcn;
+}
+
+static cdbus_proxy_fcn_t find_member_with_interface(const char * interface,
+					const char * member,
+					struct cdbus_interface_entry_t * table)
+{
+	struct cdbus_interface_entry_t * itf_entry = table;
+
+
+ 	while (itf_entry->itf_name) {
+		if (!strcmp(itf_entry->itf_name, interface))
+			break;
+		itf_entry++;
+	}
+
+	if (!itf_entry->itf_name)
+		return NULL;
+	return find_member(member, itf_entry->itf_table);
+}
+
+static cdbus_proxy_fcn_t find_member_all_interfaces(const char * member,
+					struct cdbus_interface_entry_t * table)
+{
+	struct cdbus_interface_entry_t * itf_entry = table;
+	cdbus_proxy_fcn_t fcn = NULL;
+
+
+ 	while (itf_entry->itf_name) {
+		fcn = find_member(member, itf_entry->itf_table);
+		if (fcn)
+			return fcn;
+		itf_entry++;
+	}
+
+	return NULL;
+}
+
+static DBusHandlerResult message_handler(DBusConnection * cnx,
+					DBusMessage * msg,
+					void * user_data)
+{
+	struct list_item_t * item;
+	struct signal_t * signal;
+	cdbus_proxy_fcn_t proxy;
+
+	if (dbus_message_get_type(msg) != DBUS_MESSAGE_TYPE_SIGNAL)
+		goto not_handled;
+
+	for_each_list_item(&signal_list, item, item, signal) {
+		if (!signal->data.object_table)
+			continue;
+		if ((signal->cnx = cnx)
+			&& (!signal->object || dbus_message_has_path(msg, signal->object))
+			&& (!signal->sender || dbus_message_has_sender(msg, signal->sender)))
+			break;
+	}
+
+	if (!signal)
+		goto signal_not_handled;
+
+	if (dbus_message_get_interface(msg))
+		proxy = find_member_with_interface(dbus_message_get_interface(msg),
+						dbus_message_get_member(msg),
+						signal->data.object_table);
+	else
+		proxy = find_member_all_interfaces(dbus_message_get_member(msg),
+						signal->data.object_table);
+
+	if (!proxy)
+		goto signal_not_handled;
+
+	if (proxy(cnx, msg, signal->data.user_data) < 0)
+		goto signal_not_handled;
+
+
+	LOG(LOG_DEBUG, "signal %s.%s from %s (%s) catched\n",
+		dbus_message_get_interface(msg),
+		dbus_message_get_member(msg),
+		dbus_message_get_path(msg),
+		dbus_message_get_sender(msg));
+
+	return DBUS_HANDLER_RESULT_HANDLED;
+
+signal_not_handled:
+	LOG(LOG_DEBUG, "signal %s.%s from %s (%s) ignored\n",
+		dbus_message_get_interface(msg),
+		dbus_message_get_member(msg),
+		dbus_message_get_path(msg),
+		dbus_message_get_sender(msg));
+
+not_handled:
+	return  DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+}
+
 
 DBusConnection* cdbus_get_connection(DBusBusType bus_type, char *name,
 				int replace)
@@ -288,6 +406,8 @@ DBusConnection* cdbus_get_connection(DBusBusType bus_type, char *name,
 		goto connection_unref;
 
 	timeout_enable(timeout);
+
+	dbus_connection_add_filter(cnx, message_handler, NULL, NULL);
 
 	return cnx;
 
@@ -501,57 +621,7 @@ post_update:
 	return 0;
 }
 
-cdbus_proxy_fcn_t find_method(const char * member,
-			struct cdbus_message_entry_t * itf_table)
-{
-	struct cdbus_message_entry_t * msg_entry = itf_table;
- 	while (msg_entry->msg_name) {
-		if (!strcmp(msg_entry->msg_name, member))
-			break;
-		msg_entry++;
-	}
-
-	if (!msg_entry->msg_name)
-		return NULL;
-	return msg_entry->msg_fcn;
-}
-
-cdbus_proxy_fcn_t find_method_with_interface(const char * interface,
-					const char * member,
-					struct cdbus_interface_entry_t * table)
-{
-	struct cdbus_interface_entry_t * itf_entry = table;
-
-
- 	while (itf_entry->itf_name) {
-		if (!strcmp(itf_entry->itf_name, interface))
-			break;
-		itf_entry++;
-	}
-
-	if (!itf_entry->itf_name)
-		return NULL;
-	return find_method(member, itf_entry->itf_table);
-}
-
-cdbus_proxy_fcn_t find_method_all_interfaces(const char * member,
-					struct cdbus_interface_entry_t * table)
-{
-	struct cdbus_interface_entry_t * itf_entry = table;
-	cdbus_proxy_fcn_t fcn = NULL;
-
-
- 	while (itf_entry->itf_name) {
-		fcn = find_method(member, itf_entry->itf_table);
-		if (fcn)
-			return fcn;
-		itf_entry++;
-	}
-
-	return NULL;
-}
-
-int extstr_init(struct extensible_string_t * str)
+static int extstr_init(struct extensible_string_t * str)
 {
 	str->size = 0;
 	str->buf_size = 0;
@@ -562,7 +632,7 @@ int extstr_init(struct extensible_string_t * str)
 	return 0;
 }
 
-void extstr_free(struct extensible_string_t * str)
+static void extstr_free(struct extensible_string_t * str)
 {
 	if (str->buffer) {
 		free(str->buffer);
@@ -572,7 +642,7 @@ void extstr_free(struct extensible_string_t * str)
 	str->buf_size = 0;
 }
 
-int extstr_extend(struct extensible_string_t * str)
+static int extstr_extend(struct extensible_string_t * str)
 {
 	char * buf;
 	buf = realloc(str->buffer, str->buf_size + EXTSTR_BUFF_SIZE);
@@ -585,7 +655,7 @@ int extstr_extend(struct extensible_string_t * str)
 	return 0;
 }
 
-int extstr_append_sprintf(struct extensible_string_t * str,
+static int extstr_append_sprintf(struct extensible_string_t * str,
 			const char * format, ...)
 {
 	va_list ap;
@@ -615,7 +685,7 @@ int extstr_append_sprintf(struct extensible_string_t * str,
 	return 0;
 }
 
-int generate_argument_xml(struct extensible_string_t * str,
+static int generate_argument_xml(struct extensible_string_t * str,
 			struct cdbus_arg_entry_t * arg)
 {
 	int ret;
@@ -630,13 +700,13 @@ int generate_argument_xml(struct extensible_string_t * str,
 }
 
 
-int generate_message_xml(struct extensible_string_t * str,
+static int generate_message_xml(struct extensible_string_t * str,
 			struct cdbus_message_entry_t * msg)
 {
 	int ret;
 	struct cdbus_arg_entry_t *arg = msg->msg_table;
 
-	if (msg->msg_fcn) {
+	if (!msg->is_signal) {
 		ret = extstr_append_sprintf(str,
 					"<method name=\"%s\">",
 					msg->msg_name);
@@ -653,7 +723,7 @@ int generate_message_xml(struct extensible_string_t * str,
 		arg++;
 	}
 
-	if (msg->msg_fcn) {
+	if (!msg->is_signal) {
 		ret = extstr_append_sprintf(str,
 					"</method>");
 	} else {
@@ -666,7 +736,7 @@ int generate_message_xml(struct extensible_string_t * str,
 	return 0;
 }
 
-int generate_interface_xml(struct extensible_string_t * str,
+static int generate_interface_xml(struct extensible_string_t * str,
 			struct cdbus_interface_entry_t * itf)
 {
 	int ret;
@@ -694,7 +764,7 @@ int generate_interface_xml(struct extensible_string_t * str,
 }
 
 
-int generate_object_xml(DBusConnection * cnx,
+static int generate_object_xml(DBusConnection * cnx,
 			DBusMessage * msg,
 			struct extensible_string_t * str,
 			struct cdbus_interface_entry_t * table)
@@ -738,7 +808,7 @@ int generate_object_xml(DBusConnection * cnx,
 }
 
 
-int object_introspect(DBusConnection *cnx,
+static int object_introspect(DBusConnection *cnx,
 		DBusMessage *msg,
 		struct cdbus_interface_entry_t * table)
 {
@@ -776,7 +846,7 @@ free:
 	return ret;
 }
 
-DBusHandlerResult object_dispatch(DBusConnection *cnx,
+static DBusHandlerResult object_dispatch(DBusConnection *cnx,
 			DBusMessage *msg,
 			void *data)
 {
@@ -788,6 +858,8 @@ DBusHandlerResult object_dispatch(DBusConnection *cnx,
 	int ret;
 
 	if (!data)
+		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+	if (dbus_message_get_type(msg) == DBUS_MESSAGE_TYPE_SIGNAL)
 		return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 
 	if (user_data)
@@ -806,9 +878,9 @@ DBusHandlerResult object_dispatch(DBusConnection *cnx,
 
 	interface = dbus_message_get_interface(msg);
 	if (interface) {
-		fcn = find_method_with_interface(interface, member, table);
+		fcn = find_member_with_interface(interface, member, table);
 	} else {
-		fcn = find_method_all_interfaces(member, table);
+		fcn = find_member_all_interfaces(member, table);
 	}
 
 	if (!fcn) {
@@ -847,4 +919,104 @@ int cdbus_unregister_object(DBusConnection * cnx, const char * path)
 	if (ret == FALSE)
 		return -1;
 	return 0;
+}
+
+int cdbus_register_signals(DBusConnection * cnx, const char * sender, const char * path,
+	struct cdbus_user_data_t * user_data)
+{
+	struct signal_t * signal;
+	struct cdbus_interface_entry_t * itf_entry;
+	int len;
+
+
+	if (!cnx)
+		return -1;
+	if (!user_data || !user_data->object_table)
+		return -1;
+
+	signal = malloc(sizeof(*signal));
+	if (!signal)
+		return -1;
+	memset(signal, 0, sizeof(*signal));
+
+	LIST_ITEM_INIT(signal->item);
+	signal->cnx = cnx;
+	if (sender)
+		signal->sender = strdup(sender);
+	if (path)
+		signal->object = strdup(path);
+	signal->data.object_table = user_data->object_table;
+	signal->data.user_data = user_data->user_data;
+	signal->match_rule = malloc(sizeof(char) * DBUS_MAXIMUM_MATCH_RULE_LENGTH);
+
+	if (!signal->match_rule)
+		goto free;
+	if (sender && !signal->sender)
+		goto free;
+	if (path && !signal->object)
+		goto free;
+
+	len = snprintf(signal->match_rule, DBUS_MAXIMUM_MATCH_RULE_LENGTH,
+		"type='signal'");
+	itf_entry = signal->data.object_table;
+	while (itf_entry->itf_name) {
+		len += snprintf(signal->match_rule + len,
+				DBUS_MAXIMUM_MATCH_RULE_LENGTH - len,
+				",interface='%s'",
+				itf_entry->itf_name);
+		itf_entry++;
+	}
+	if (signal->sender)
+		len += snprintf(signal->match_rule + len,
+				DBUS_MAXIMUM_MATCH_RULE_LENGTH - len,
+				",sender='%s'",
+				signal->sender);
+	if (signal->object)
+		len += snprintf(signal->match_rule + len,
+				DBUS_MAXIMUM_MATCH_RULE_LENGTH - len,
+				",path='%s'",
+				signal->object);
+	signal->match_rule[DBUS_MAXIMUM_MATCH_RULE_LENGTH - 1] = 0;
+	dbus_bus_add_match(cnx, signal->match_rule, NULL);
+
+	list_add_tail(&signal_list, &signal->item);
+
+	return 0;
+
+free:
+	if (signal->match_rule)
+		free(signal->match_rule);
+ 	if (signal->sender)
+		free(signal->sender);
+ 	if (signal->object)
+		free(signal->object);
+	free(signal);
+	return -1;
+
+}
+
+int cdbus_unregister_signals(DBusConnection * cnx, const char * sender, const char * path)
+{
+	struct list_item_t * item;
+	struct signal_t * signal;
+
+	for_each_list_item(&signal_list, item, item, signal) {
+		if ((signal->cnx == cnx)
+			&& (signal->sender == sender)
+			&& (signal->object == path))
+			break;
+	}
+	if (signal) {
+		list_rem_item(&signal->item);
+		dbus_bus_remove_match(cnx, signal->match_rule, NULL);
+
+		if (signal->sender)
+			free(signal->sender);
+		if (signal->object)
+			free(signal->object);
+		free(signal);
+		return 0;
+	} else {
+		return -1;
+	}
 }

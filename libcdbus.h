@@ -23,11 +23,17 @@ int cdbus_process_pollfds(struct pollfd * fds, int nfds);
 int cdbus_next_timeout_event();
 int cdbus_timeout_handle();
 
-/* Objects management */
 struct cdbus_user_data_t;
+
+/* Objects management */
 int cdbus_register_object(DBusConnection * cnx, const char * path,
 			struct cdbus_user_data_t * user_data);
 int cdbus_unregister_object(DBusConnection * cnx, const char * path);
+
+/* Signals */
+int cdbus_register_signals(DBusConnection * cnx, const char * sender, const char * path,
+	struct cdbus_user_data_t * user_data);
+int cdbus_unregister_signals(DBusConnection * cnx, const char * sender, const char * path);
 
 
 /* Private declarations */
@@ -46,6 +52,7 @@ struct cdbus_arg_entry_t
 
 struct cdbus_message_entry_t
 {
+	int is_signal;
 	char *msg_name;
 	cdbus_proxy_fcn_t msg_fcn;
 	struct cdbus_arg_entry_t *msg_table;
