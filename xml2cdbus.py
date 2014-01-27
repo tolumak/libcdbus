@@ -791,7 +791,7 @@ class DBusSignal:
         string = "int " 
         string += self.CName()
         attributes = [x.CVarProto() for x in self.attributes]
-        string += "(DBusConnection *cnx, const char * object_path"
+        string += "(DBusConnection *cnx, const char * object_path, const char * dest"
         if attributes:
             string += ", " 
         string += ', '.join(attributes) + ");\n"
@@ -800,7 +800,7 @@ class DBusSignal:
     def CFunction(self):
         string = "int "
         string += self.CName()
-        string += "(DBusConnection *cnx, const char * object_path"
+        string += "(DBusConnection *cnx, const char * object_path, const char * dest"
         attributes = [x.CVarProto() for x in self.attributes]
         if attributes:
             string += ", "
@@ -814,6 +814,10 @@ class DBusSignal:
         string += "\tmsg = dbus_message_new_signal((object_path ? object_path :\"" + self.object.name + "\"), \"" + self.interface.name + "\", \"" + self.name + "\");\n"
         string += "\tif (!msg) {\n"
         string += "\t\treturn -1;\n"
+        string += "\t}\n"
+
+        string += "\tif (dest) {\n"
+        string += "\t\tdbus_message_set_destination(msg, dest);\n"
         string += "\t}\n"
 
         # pack the variables and send the message
