@@ -140,8 +140,6 @@ static void free_timeout(void *data)
 	struct timeout_t *timeout = data;
 
 	LOG(LOG_DEBUG, "free timeout\n");
-	timeout_disable(timeout);
-
 	free(timeout);
 }
 
@@ -205,7 +203,6 @@ static void rem_timeout(DBusTimeout *dbtimeout, void *data)
 	timeout = dbus_timeout_get_data(dbtimeout);
 	if (timeout) {
 		timeout_disable(timeout);
-		free_timeout(timeout);
 	}
 }
 
