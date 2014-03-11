@@ -551,6 +551,8 @@ class DBusSignature:
             string += "\t" + sub.CType(varname + "_member_" + str(self.subs.index(sub))) + " member_" + str(self.subs.index(sub)) + ";\n"
             if sub.IsArray():
                 string += "\tint member_" +  str(self.subs.index(sub)) + "_len;\n"
+            if sub.signature == "v":
+                string += "\tint member_" +  str(self.subs.index(sub)) + "_dbus_type;\n"
         string += "};\n"
         return string
 
