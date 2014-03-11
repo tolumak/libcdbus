@@ -203,14 +203,25 @@ class DBusSignature:
             else:
                 varname += "[" + str(member) + "]"
         if not self.IsPrimitive():
-            for x in self.subs:
-                subfree = x.CFree(varname, str(self.subs.index(x)))
-                for y in subfree:
-                    strings.append(y)
+            if self.IsArray():
+                strings.append("if (" + varname + ") {");
+                strings.append("\tint i;");
+                strings.append("\tfor (i = 0 ;  i < " + varname + "_len ; i++) {")
+                for x in self.subs:
+                    subfree = x.CFree(varname, "i", True)
+                    for y in subfree:
+                        strings.append(y)
+                strings.append("\t}")
+                strings.append("}")
+            else:
+                for x in self.subs:
+                    subfree = x.CFree(varname, str(self.subs.index(x)))
+                    for y in subfree:
+                        strings.append(y)
             if self.IsArray() or self.signature == "v":
-                strings.append("if (" + varname + "); free(" + varname + ")");
+                strings.append("if (" + varname + ") free(" + varname + ");");
         elif self.signature == "v":
-                strings.append("if (" + varname + "); free(" + varname + ")");
+                strings.append("if (" + varname + ") free(" + varname + ");");
         return strings;
 
     def CPack(self, direction, varname, member = "", iterator="iter", in_array=False):
@@ -688,7 +699,7 @@ class DBusMethod:
         for x in self.attributes:
             attrfree = x.CFree()
             if len(attrfree) != 0:
-                string += "\t" + ";\n\t".join(y for y in attrfree) + ";\n" 
+                string += "\t" + "\n\t".join(y for y in attrfree) + "\n" 
         string += "\treturn ret;\n"
         string += "}\n"
         return string
