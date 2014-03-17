@@ -690,8 +690,8 @@ class DBusMethod:
         string += "\n"
         string += "\t\t" + self.CallCFreeFunction() + ";\n"
         string += "\t}\n"
-
-        string += "\tdbus_connection_send(cnx, reply, NULL);\n"
+        string += "\tif(cnx)\n"
+        string += "\t\tdbus_connection_send(cnx, reply, NULL);\n"
         string += "\tdbus_message_unref(reply);\n"
 
         string += "\n"
@@ -742,7 +742,8 @@ class DBusMethod:
                 string += "\t" + ";\n\t".join(y for y in x.CPack()) + ";\n"
         string += "\n"
 
-        string += "\treply = dbus_connection_send_with_reply_and_block(cnx, msg, DBUS_TIMEOUT_USE_DEFAULT, NULL);\n"
+        string += "\tif (cnx)\n"
+        string += "\t\treply = dbus_connection_send_with_reply_and_block(cnx, msg, DBUS_TIMEOUT_USE_DEFAULT, NULL);\n"
         string += "\tif (!reply)\n"
         string += "\t\t return -1;\n"
         string += "\tdbus_message_unref(msg);\n"
@@ -831,8 +832,8 @@ class DBusSignal:
         for x in self.attributes:
             string += "\t" + ";\n\t".join(y for y in x.CPack()) + ";\n"
         string += "\n"
-
-        string += "\tdbus_connection_send(cnx, msg, NULL);\n"
+        string += "\tif (cnx)\n"
+        string += "\t\tdbus_connection_send(cnx, msg, NULL);\n"
         string += "\tdbus_message_unref(msg);\n"
 
         string += "\n"
