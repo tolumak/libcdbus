@@ -651,7 +651,7 @@ class DBusMethod:
         string += "(DBusConnection *cnx, DBusMessage *msg, void *data)\n"
         string += "{\n"
         string += "\tint ret;\n"
-        string += "\tDBusMessage * reply;\n"
+        string += "\tDBusMessage * reply = NULL;\n"
         string += "\t" + ";\n\t".join(x.CDeclareVar() for x in self.attributes) + ";\n"
 
         # Unpack the variables 
@@ -726,7 +726,7 @@ class DBusMethod:
         string += ', '.join(attributes)
         string += ")\n"
         string += "{\n"
-        string += "\tDBusMessage * msg, * reply;\n"
+        string += "\tDBusMessage * msg, * reply = NULL;\n"
         string += "\tDBusMessageIter iter;\n"
         string += "\n"
 
