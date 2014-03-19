@@ -12,8 +12,9 @@
 #include <poll.h>
 #include <dbus/dbus.h>
 
-DBusConnection* cdbus_get_connection(DBusBusType bus_type, char *name,
-				int replace);
+DBusConnection* cdbus_get_connection(DBusBusType bus_type);
+
+int cdbus_request_name(DBusConnection* cnx, char * name, int replace);
 
 const char * cdbus_version_string();
 

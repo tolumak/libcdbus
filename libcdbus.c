@@ -355,13 +355,11 @@ not_handled:
 }
 
 
-DBusConnection* cdbus_get_connection(DBusBusType bus_type, char *name,
-				int replace)
+DBusConnection* cdbus_get_connection(DBusBusType bus_type)
 {
 	DBusError error;
 	DBusConnection *cnx;
-	int flags = 0;
-	int result;
+
 	struct timeout_t *timeout;
 
 	dbus_error_init(&error);
@@ -375,18 +373,6 @@ DBusConnection* cdbus_get_connection(DBusBusType bus_type, char *name,
 	if (!cnx || (dbus_error_is_set(&error) == TRUE)) {
 		goto err;
 	}
-
-	flags |= DBUS_NAME_FLAG_ALLOW_REPLACEMENT;
-	flags |= DBUS_NAME_FLAG_DO_NOT_QUEUE;
-	if (replace)
-		flags |= DBUS_NAME_FLAG_REPLACE_EXISTING;
-
-
-	/* request the connection name */
-	result = dbus_bus_request_name(cnx, name, flags, &error);
-	if ((result < 0) || (dbus_error_is_set(&error) == TRUE))
-		goto connection_unref;
-
 
 	/* setup the connection by installing handlers */
 	dbus_connection_set_watch_functions(cnx, add_watch, rem_watch, NULL,
@@ -406,12 +392,38 @@ DBusConnection* cdbus_get_connection(DBusBusType bus_type, char *name,
 
 	dbus_connection_add_filter(cnx, message_handler, NULL, NULL);
 
+	dbus_error_free(&error);
+
 	return cnx;
 
 connection_unref:
 	dbus_connection_unref(cnx);
 err:
+	dbus_error_free(&error);
 	return NULL;
+}
+
+int cdbus_request_name(DBusConnection* cnx, char * name, int replace)
+{
+	int flags = 0;
+	DBusError error;
+	int ret = 0;
+
+	flags |= DBUS_NAME_FLAG_ALLOW_REPLACEMENT;
+	flags |= DBUS_NAME_FLAG_DO_NOT_QUEUE;
+	if (replace)
+		flags |= DBUS_NAME_FLAG_REPLACE_EXISTING;
+
+	dbus_error_init(&error);
+
+	/* request the connection name */
+	ret = dbus_bus_request_name(cnx, name, flags, &error);
+	if ((ret < 0) || (dbus_error_is_set(&error) == TRUE))
+		ret = -1;
+
+
+	dbus_error_free(&error);
+	return ret;
 }
 
 const char * cdbus_version_string()
