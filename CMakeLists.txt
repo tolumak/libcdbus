@@ -24,8 +24,7 @@ include_directories(${libutils_BINARY_DIR})
 include_directories(${PROJECT_BINARY_DIR})
 include_directories(${PROJECT_SOURCE_DIR})
 include_directories($ENV{SISE_ENV_APPS_ROOT}/common)
-include_directories(${CMAKE_SISE_ENV_SYSROOT}/usr/include/dbus-1.0/)
-include_directories(${CMAKE_SISE_ENV_SYSROOT}/usr/lib/dbus-1.0/include)
+
 
 set(SRCS libcdbus.c)
 
