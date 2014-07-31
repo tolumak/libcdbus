@@ -1,0 +1,15 @@
+/*
+ * Default CMake configuration file for S.I.S.E application
+ *
+ * Copyright 2011 S.I.S.E. S.A
+ * Author: Michel Lafon-Puyo <mlafon-puyo@sise.fr>
+ *
+ */
+
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#define LOG_LEVEL @LOG_LEVEL@
+#define LOG_APP_NAME "@CMAKE_PROJECT_NAME@"
+
+#endif

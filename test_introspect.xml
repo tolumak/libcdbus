@@ -1,21 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!--
-<node name="/org/gnome/ServiceName">
-	<interface name="org.gnome.ServiceName">
-		<annotation name="org.freedesktop.DBus.GLib.CSymbol" value="server"/>
-		<method name="EchoString">
-			<arg type="s" name="original" direction="in" />
-			<arg type="ai" name="arr_in" direction="in" />
-			<arg type="a(ii)" name="arr_out" direction="out" />
-			<arg type="(iia(ii))" name="struct_in" direction="in" />
-			<arg type="(ii)" name="struct_out" direction="out" />
-			<arg type="s" name="echo" direction="out" />
-		</method>
-	</interface>
-</node>
--->
-
 <node name="/fr/sise/test">
   <interface name="fr.sise.test">
     <method name="Hello">

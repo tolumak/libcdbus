@@ -1,0 +1,5 @@
+if (${CMAKE_BUILD_TYPE} MATCHES "Debug|RelWithDebInfo")
+set(LOG_LEVEL 7 CACHE STRING "Log level")
+else (${CMAKE_BUILD_TYPE} MATCHES "Debug|RelWithDebInfo")
+set(LOG_LEVEL 6 CACHE STRING "Log level")
+endif(${CMAKE_BUILD_TYPE} MATCHES "Debug|RelWithDebInfo")
