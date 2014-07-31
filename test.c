@@ -21,7 +21,7 @@
 
 static int done = 0;
 
-int fr_sise_test_Hello(DBusConnection *cnx, DBusMessage *msg, char * who, char ** out)
+int fr_sise_test_Hello(DBusConnection *cnx, DBusMessage *msg, void *data, char * who, char ** out)
 {
 	*out = malloc(sizeof(char) * 128);
 	if (!*out)
@@ -36,7 +36,7 @@ int fr_sise_test_Hello(DBusConnection *cnx, DBusMessage *msg, char * who, char *
 	return 0;
 }
 
-void fr_sise_test_Hello_free(DBusConnection *cnx, DBusMessage *msg, char * who, char ** out)
+void fr_sise_test_Hello_free(DBusConnection *cnx, DBusMessage *msg, void * data, char * who, char ** out)
 {
 	if (*out)
 		free(*out);
@@ -62,6 +62,7 @@ int main(int argc, char **argv)
 	char *msg;
 	int tmp;
 	int nbread;
+	struct cdbus_user_data_t user_data;
 
 	memset(&action, 0, sizeof(action));
 	action.sa_handler = sighandler;
@@ -75,12 +76,16 @@ int main(int argc, char **argv)
 	if (fifofd < 0)
 		goto unlink_fifo;
 
-	cnx = cdbus_get_connection(DBUS_BUS_SESSION, "fr.sise.test", 0);
+	cnx = cdbus_get_connection(DBUS_BUS_SESSION);
 	if (!cnx)
 		goto close_fifo;
 
+	if (cdbus_request_name(cnx, "fr.sise.test", 0) < 0)
+		goto unref_cnx;
+
+	user_data.object_table = fr_sise_test_object_table;
 	if (cdbus_register_object(cnx, "/fr/sise/test",
-					fr_sise_test_object_table) < 0)
+					&user_data) < 0)
 		goto unref_cnx;
 
 	while(!done) {
@@ -108,7 +113,7 @@ int main(int argc, char **argv)
 			}while(tmp > 0);
 
 			if (tmp == 0) {
-				if (fr_sise_test_Hi(cnx, msg) < 0) {
+				if (fr_sise_test_Hi(cnx, NULL, NULL, msg) < 0) {
 					printf("Failed to send signal!\n");
 				}
 			}
@@ -129,3 +134,9 @@ unlink_fifo:
 
 	return 0;
 }
+
+struct fr_sise_test_ops fr_sise_test_ops =
+{
+	.Hello = fr_sise_test_Hello,
+	.Hello_free = fr_sise_test_Hello_free,
+};
